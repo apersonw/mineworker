@@ -1,12 +1,12 @@
 """MineWorker —— 一个上手简单、结构清晰的 Python 爬虫框架（对标 feapder）。
 
-阶段 00 已提供：
-    - `setting`      分层配置（框架默认 ← 项目 setting.py ← 环境变量 MINEWORKER_*）
-    - `get_logger`   基于 loguru 的日志
-    - 异常层级        MineWorkerError 及其子类
+已提供：
+    - `setting`             分层配置（框架默认 ← 项目 setting.py ← 环境变量 MINEWORKER_*）
+    - `get_logger`          基于 loguru 的日志
+    - 异常层级               MineWorkerError 及其子类
+    - `Request` / `Response`  网络层（阶段 01）
 
-后续阶段将在此导出公共 API：
-    阶段 01  Request / Response
+后续阶段将在此导出：
     阶段 02  AirSpider
     阶段 03  Item / UpdateItem
 """
@@ -27,6 +27,8 @@ from mineworker.exceptions import (
     SpiderError,
     ValidationError,
 )
+from mineworker.network.request import Request
+from mineworker.network.response import Response
 from mineworker.utils.log import get_logger, log
 
 # 应用项目 setting.py 与环境变量覆盖，并按最终配置初始化日志
@@ -40,7 +42,9 @@ __all__ = [
     "MineWorkerError",
     "NotRetryError",
     "PipelineError",
+    "Request",
     "RequestError",
+    "Response",
     "ResponseError",
     "SpiderError",
     "ValidationError",

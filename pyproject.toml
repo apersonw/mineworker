@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "httpx>=0.27",
     "parsel>=1.9",
+    "w3lib>=2.1",
     "loguru>=0.7",
     "bitarray>=2.9",
 ]
@@ -86,7 +87,7 @@ files = ["mineworker"]
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["parsel.*", "bitarray.*"]
+module = ["parsel.*", "bitarray.*", "w3lib.*", "bs4.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------

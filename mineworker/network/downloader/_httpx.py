@@ -1,0 +1,89 @@
+"""基于 httpx 的同步下载器。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+import httpx
+
+from mineworker import setting
+from mineworker.exceptions import RequestError
+from mineworker.network.downloader.base import Downloader
+from mineworker.network.response import Response
+from mineworker.network.user_agent import get_random_user_agent
+
+if TYPE_CHECKING:
+    from mineworker.network.request import Request
+
+# httpx 0.28 用 follow_redirects 取代 requests 的 allow_redirects
+_CLIENT_ONLY_KEYS = frozenset({"verify", "proxy", "proxies"})
+
+
+class HttpxDownloader(Downloader):
+    def __init__(
+        self,
+        *,
+        timeout: float | None = None,
+        verify: bool = True,
+        proxy: str | None = None,
+        use_session: bool = False,
+    ) -> None:
+        self._timeout = timeout
+        self._verify = verify
+        self._proxy = proxy
+        self._use_session = use_session
+        self._client: httpx.Client | None = None
+
+    # ------------------------------------------------------------------
+    def _make_client(self, proxy: str | None, verify: bool) -> httpx.Client:
+        kwargs: dict[str, Any] = {"follow_redirects": True, "verify": verify}
+        if proxy:
+            kwargs["proxy"] = proxy
+        return httpx.Client(**kwargs)
+
+    def _client_for(self, request: Request) -> tuple[httpx.Client, bool]:
+        """返回 (client, 用完是否关闭)。"""
+        rk = request.requests_kwargs
+        proxy = rk.get("proxy") or rk.get("proxies") or self._proxy
+        verify = rk.get("verify", self._verify)
+        if self._use_session and proxy == self._proxy and verify == self._verify:
+            if self._client is None:
+                self._client = self._make_client(self._proxy, self._verify)
+            return self._client, False
+        return self._make_client(proxy, verify), True
+
+    def _send_kwargs(self, request: Request) -> dict[str, Any]:
+        kwargs = {k: v for k, v in request.requests_kwargs.items() if k not in _CLIENT_ONLY_KEYS}
+        if "allow_redirects" in kwargs:
+            kwargs["follow_redirects"] = kwargs.pop("allow_redirects")
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = (
+                self._timeout if self._timeout is not None else setting.REQUEST_TIMEOUT
+            )
+
+        want_ua = request.random_user_agent
+        if want_ua is None:
+            want_ua = setting.RANDOM_USER_AGENT
+        headers = dict(kwargs.get("headers") or {})
+        if want_ua and not any(k.lower() == "user-agent" for k in headers):
+            headers["User-Agent"] = get_random_user_agent()
+        if headers:
+            kwargs["headers"] = headers
+        return kwargs
+
+    # ------------------------------------------------------------------
+    def download(self, request: Request) -> Response:
+        client, should_close = self._client_for(request)
+        try:
+            resp = client.request(request.method, request.url, **self._send_kwargs(request))
+        except httpx.HTTPError as exc:
+            raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
+        finally:
+            if should_close:
+                client.close()
+        return Response.from_httpx(resp, request)
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
