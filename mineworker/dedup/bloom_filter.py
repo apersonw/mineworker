@@ -13,13 +13,21 @@ import threading
 from bitarray import bitarray
 
 
-def _optimal_size(capacity: int, error_rate: float) -> int:
+def optimal_size(capacity: int, error_rate: float) -> int:
     size = math.ceil(-capacity * math.log(error_rate) / (math.log(2) ** 2))
     return max(size, 8)
 
 
-def _optimal_hashes(size: int, capacity: int) -> int:
+def optimal_hashes(size: int, capacity: int) -> int:
     return max(1, round(size / capacity * math.log(2)))
+
+
+def bit_positions(key: str, size: int, num_hashes: int) -> list[int]:
+    """Kirsch-Mitzenmacher 双哈希，给出 key 在 size 位数组里要置位的下标。"""
+    data = key.encode()
+    h1 = int.from_bytes(hashlib.md5(data).digest(), "big")
+    h2 = int.from_bytes(hashlib.sha1(data).digest(), "big") | 1
+    return [(h1 + i * h2) % size for i in range(num_hashes)]
 
 
 class MemoryBloomFilter:
@@ -28,18 +36,15 @@ class MemoryBloomFilter:
             raise ValueError("error_rate 必须在 (0, 1) 之间")
         self.capacity = max(1, capacity)
         self.error_rate = error_rate
-        self.size = _optimal_size(self.capacity, error_rate)
-        self.num_hashes = _optimal_hashes(self.size, self.capacity)
+        self.size = optimal_size(self.capacity, error_rate)
+        self.num_hashes = optimal_hashes(self.size, self.capacity)
         self._bits = bitarray(self.size)
         self._bits.setall(0)
         self._lock = threading.Lock()
         self.count = 0
 
     def _positions(self, key: str) -> list[int]:
-        data = key.encode()
-        h1 = int.from_bytes(hashlib.md5(data).digest(), "big")
-        h2 = int.from_bytes(hashlib.sha1(data).digest(), "big") | 1
-        return [(h1 + i * h2) % self.size for i in range(self.num_hashes)]
+        return bit_positions(key, self.size, self.num_hashes)
 
     def add(self, key: str) -> bool:
         """返回 ``True`` 表示新指纹，``False`` 表示（几乎确定）已存在。"""

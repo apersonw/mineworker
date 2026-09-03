@@ -48,6 +48,7 @@ dev = [
     "respx>=0.21",
     "pytest-httpserver>=1.0",
     "mongomock>=4.1",
+    "fakeredis>=2.20",
     "ruff>=0.6",
     "mypy>=1.11",
     "pre-commit>=3.7",

@@ -70,7 +70,8 @@ FAILED_ITEM_PATH: str = "failed_items.jsonl"
 FAILED_REQUEST_PATH: str = "failed_requests.jsonl"
 
 # ---- 去重 ----
-DEDUP_FILTER: str = "memory"  # memory（布隆）| lite（精确 set）
+# memory（进程内布隆）| lite（进程内精确 set）| redis（Redis 布隆）| redis-set（Redis 精确）
+DEDUP_FILTER: str = "memory"
 DEDUP_TO_MD5: bool = True  # Dedup 直接传入原始值时是否先 md5
 DEDUP_ERROR_RATE: float = 1e-6
 DEDUP_INITIAL_CAPACITY: int = 1_000_000
@@ -79,8 +80,9 @@ DEDUP_INITIAL_CAPACITY: int = 1_000_000
 MONGO_URI: str = "mongodb://localhost:27017"
 MONGO_DB: str = "mineworker"
 
-# ---- Redis（Roadmap v2 预留）----
+# ---- Redis（分布式 Spider / 持久化去重）----
 REDIS_URL: str = "redis://localhost:6379/0"
+REDIS_KEY_PREFIX: str = "mineworker"  # 所有 Redis key 的命名空间前缀
 
 # ---- 浏览器渲染（render=True，需 pip install mineworker[render]）----
 WEBDRIVER: dict[str, Any] = {
