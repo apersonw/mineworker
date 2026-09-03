@@ -50,6 +50,16 @@ REQUEST_TIMEOUT: float = 22.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
+# ---- 下载中间件（点号路径，实现 process_request / process_response）----
+DOWNLOADER_MIDDLEWARES: list[str] = []
+
+# ---- 代理池 ----
+PROXY_ENABLE: bool = False
+PROXY_POOL: str = "mineworker.network.proxy_pool.api.ApiProxyPool"
+PROXY_EXTRACT_API: str = ""  # 返回代理的 URL（每行一个，或 JSON 数组）
+PROXY_MAX_USE_TIMES: int = 100  # 单个代理最多用多少次后轮换
+PROXY_MIN_INTERVAL: float = 1.0  # 两次抓取代理列表的最小间隔（秒）
+
 # ---- Item / 管道 ----
 ITEM_MAX_CACHED_COUNT: int = 5000  # ItemBuffer 达到此量立即 flush
 ITEM_PIPELINES: list[str] = ["mineworker.pipelines.console.ConsolePipeline"]
@@ -88,11 +98,23 @@ WEBDRIVER: dict[str, Any] = {
     "viewport": [1920, 1080],
 }
 
+# ---- 调试 ----
+DEBUG: bool = False  # AirSpider(debug=True) 会置为 True：日志转 DEBUG、单线程
+
+# ---- 指标 ----
+METRICS_ENABLE: bool = False
+METRICS_LOG_INTERVAL: float = 10.0  # 定时打印进度行的间隔（秒；0 = 关）
+METRICS_PROMETHEUS_PORT: int = 0  # >0 且装了 prometheus-client 时起 exporter
+
 # ---- 告警 ----
+WARNING_ENABLE: bool = True  # 关掉则完全不告警
 WARNING_FEISHU_WEBHOOK: str = ""
-WARNING_INTERVAL: float = 300.0
-WARNING_FAILED_RATE: float = 0.5
-WARNING_FAILED_COUNT: int = 1000
+WARNING_EMAIL: dict[str, Any] = {}  # {host, port, user, password, to: [...], ssl: bool}
+WARNING_INTERVAL: float = 300.0  # 同类告警的最小间隔（秒），防刷屏
+WARNING_FAILED_RATE: float = 0.5  # 失败率阈值
+WARNING_MIN_REQUESTS: int = 50  # 少于这么多请求不计算失败率
+WARNING_FAILED_COUNT: int = 1000  # 失败请求数阈值
+WARNING_STALL_SECONDS: float = 600.0  # 多久没有新的成功请求算卡死（0 = 关）
 
 
 # ======================================================================

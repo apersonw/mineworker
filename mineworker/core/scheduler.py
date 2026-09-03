@@ -16,9 +16,13 @@ from mineworker.core.parser_control import ParserWorker
 from mineworker.core.task_queue import MemoryTaskQueue
 from mineworker.exceptions import SpiderError
 from mineworker.network.downloader import close_default_downloaders
+from mineworker.network.middleware import MiddlewareManager
+from mineworker.network.proxy_pool import close_proxy_pool
 from mineworker.network.request import Request
 from mineworker.utils import tools
+from mineworker.utils.alert import AlertManager
 from mineworker.utils.log import get_logger
+from mineworker.utils.metrics import MetricsReporter
 from mineworker.utils.stats import Stats
 
 if TYPE_CHECKING:
@@ -39,12 +43,15 @@ class AirScheduler:
         pipelines: list[str] | None = None,
     ) -> None:
         self._parser = parser
-        self._thread_count = thread_count or setting.SPIDER_THREAD_COUNT
+        self._thread_count = 1 if setting.DEBUG else (thread_count or setting.SPIDER_THREAD_COUNT)
         self.stats = Stats()
         self._task_queue = MemoryTaskQueue()
         self._request_buffer = RequestBuffer(self._task_queue, self.stats)
         self._item_buffer = ItemBuffer(self.stats, handler=item_handler, pipelines=pipelines)
         self._collector = MemoryCollector(self._task_queue)
+        self._middleware = MiddlewareManager(setting.DOWNLOADER_MIDDLEWARES)
+        self._alert = AlertManager(self.stats)
+        self._metrics: MetricsReporter | None = None
         self._workers: list[ParserWorker] = []
         self._stop_event = threading.Event()
         self._interrupted = False
@@ -80,9 +87,19 @@ class AirScheduler:
                 request_buffer=self._request_buffer,
                 item_buffer=self._item_buffer,
                 stats=self.stats,
+                middleware=self._middleware,
             )
             worker.start()
             self._workers.append(worker)
+        if setting.METRICS_ENABLE:
+            self._metrics = MetricsReporter(
+                self.stats,
+                {
+                    "queue_depth": self._task_queue.qsize,
+                    "in_flight": lambda: sum(w.busy for w in self._workers),
+                },
+            )
+            self._metrics.start()
 
     def _seed(self) -> None:
         count = 0
@@ -115,6 +132,7 @@ class AirScheduler:
                     return
             else:
                 idle_streak = 0
+            self._alert.check()
             self._stop_event.wait(setting.DONE_CHECK_INTERVAL)
 
     def _teardown(self) -> None:
@@ -122,6 +140,9 @@ class AirScheduler:
             worker.stop()
         for worker in self._workers:
             worker.join(timeout=_JOIN_TIMEOUT)
+        if self._metrics is not None:
+            self._metrics.stop()
+            self._metrics.join(timeout=_JOIN_TIMEOUT)
         self._request_buffer.stop()
         self._item_buffer.stop()
         self._request_buffer.join(timeout=_JOIN_TIMEOUT)
@@ -131,6 +152,7 @@ class AirScheduler:
         self._item_buffer.close()
         self._restore_signal()
         close_default_downloaders()
+        close_proxy_pool()
         if self._interrupted and setting.DUMP_UNFINISHED_ON_EXIT:
             self._dump_unfinished()
 

@@ -4,9 +4,9 @@
     - `setting`               分层配置（框架默认 ← 项目 setting.py ← 环境变量 MINEWORKER_*）
     - `get_logger`            基于 loguru 的日志
     - 异常层级                 MineWorkerError 及其子类
-    - `Request` / `Response`      网络层（阶段 01）
-    - `AirSpider` / `BaseParser`  轻量单机运行时（阶段 02）
-    - `Item` / `UpdateItem`       结构化数据 + 管道落库（阶段 03）
+    - `Request` / `Response`      网络层
+    - `AirSpider` / `BaseParser`  轻量单机运行时（含浏览器渲染、中间件、代理池、指标、告警）
+    - `Item` / `UpdateItem`       结构化数据 + 管道落库 + 去重
 """
 
 from __future__ import annotations

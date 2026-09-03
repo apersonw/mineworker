@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any, cast
 from mineworker import setting
 from mineworker.exceptions import NotRetryError, RequestError, SpiderError, ValidationError
 from mineworker.network.downloader import download_request
+from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.request import Request
+from mineworker.network.response import Response
 from mineworker.utils import stats as sk
 from mineworker.utils.log import get_logger
 
@@ -19,7 +21,6 @@ if TYPE_CHECKING:
     from mineworker.buffer.request_buffer import RequestBuffer
     from mineworker.core.base_parser import BaseParser
     from mineworker.core.collector import MemoryCollector
-    from mineworker.network.response import Response
     from mineworker.utils.stats import Stats
 
 log = get_logger("worker")
@@ -37,6 +38,7 @@ class ParserWorker(threading.Thread):
         request_buffer: RequestBuffer,
         item_buffer: ItemBuffer,
         stats: Stats,
+        middleware: MiddlewareManager | None = None,
     ) -> None:
         super().__init__(name=f"worker-{index}", daemon=True)
         self._parser = parser
@@ -44,6 +46,7 @@ class ParserWorker(threading.Thread):
         self._request_buffer = request_buffer
         self._item_buffer = item_buffer
         self._stats = stats
+        self._middleware = middleware or MiddlewareManager()
         self._stop_event = threading.Event()
         self.busy = False
 
@@ -67,7 +70,13 @@ class ParserWorker(threading.Thread):
 
     # ------------------------------------------------------------------
     def _process(self, request: Request) -> None:
+        response: Response | None = None
         try:
+            mw_out = self._middleware.process_request(request)
+            if isinstance(mw_out, Response):
+                response = mw_out
+            else:
+                request = mw_out
             replaced = self._parser.download_midware(request)
         except Exception as exc:
             self._retry_or_fail(request, None, exc, reason="download_midware 异常")
@@ -75,13 +84,21 @@ class ParserWorker(threading.Thread):
         if replaced is not None:
             request = replaced
 
-        response: Response | None = None
-        if request.auto_request:
+        if response is None and request.auto_request:
             try:
                 response = download_request(request)
             except RequestError as exc:
                 self._retry_or_fail(request, None, exc, reason="下载失败")
                 return
+
+        if response is not None:
+            resp_out = self._middleware.process_response(request, response)
+            if isinstance(resp_out, Request):
+                resp_out.filter_repeat = False
+                self._request_buffer.put(resp_out)
+                self._stats.incr(sk.REQUEST_OK)
+                return
+            response = resp_out
 
         if response is not None and not self._validate(request, response):
             return

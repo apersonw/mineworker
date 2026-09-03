@@ -9,6 +9,7 @@ import httpx
 from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader.base import Downloader
+from mineworker.network.proxy_pool import get_proxy_pool
 from mineworker.network.response import Response
 from mineworker.network.user_agent import get_random_user_agent
 
@@ -41,16 +42,23 @@ class HttpxDownloader(Downloader):
             kwargs["proxy"] = proxy
         return httpx.Client(**kwargs)
 
-    def _client_for(self, request: Request) -> tuple[httpx.Client, bool]:
-        """返回 (client, 用完是否关闭)。"""
+    def _pick_proxy(self, request: Request) -> str | None:
         rk = request.requests_kwargs
-        proxy = rk.get("proxy") or rk.get("proxies") or self._proxy
-        verify = rk.get("verify", self._verify)
+        explicit = rk.get("proxy") or rk.get("proxies") or self._proxy
+        if explicit:
+            return explicit
+        pool = get_proxy_pool()
+        return pool.get_proxy() if pool is not None else None
+
+    def _client_for(self, request: Request) -> tuple[httpx.Client, bool, str | None]:
+        """返回 (client, 用完是否关闭, 本次使用的代理)。"""
+        proxy = self._pick_proxy(request)
+        verify = request.requests_kwargs.get("verify", self._verify)
         if self._use_session and proxy == self._proxy and verify == self._verify:
             if self._client is None:
                 self._client = self._make_client(self._proxy, self._verify)
-            return self._client, False
-        return self._make_client(proxy, verify), True
+            return self._client, False, proxy
+        return self._make_client(proxy, verify), True, proxy
 
     def _send_kwargs(self, request: Request) -> dict[str, Any]:
         kwargs = {k: v for k, v in request.requests_kwargs.items() if k not in _CLIENT_ONLY_KEYS}
@@ -73,10 +81,14 @@ class HttpxDownloader(Downloader):
 
     # ------------------------------------------------------------------
     def download(self, request: Request) -> Response:
-        client, should_close = self._client_for(request)
+        client, should_close, proxy = self._client_for(request)
         try:
             resp = client.request(request.method, request.url, **self._send_kwargs(request))
         except httpx.HTTPError as exc:
+            if proxy:
+                pool = get_proxy_pool()
+                if pool is not None:
+                    pool.report_bad(proxy)
             raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
         finally:
             if should_close:

@@ -1,0 +1,56 @@
+# MineWorker
+
+一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
+你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
+
+## 安装
+
+```bash
+pip install mineworker            # 核心
+pip install "mineworker[all]"     # 含浏览器渲染 / MongoDB / Redis / CLI / 指标
+```
+
+按需选择：`mineworker[render]`（Playwright）、`[mongo]`、`[redis]`、`[cli]`、`[metrics]`。
+
+## 30 秒示例
+
+```python
+import mineworker as mw
+
+
+class NewsSpider(mw.AirSpider):
+    def start_requests(self):
+        for page in range(1, 6):
+            yield mw.Request(f"https://example.com/news?p={page}", callback=self.parse)
+
+    def parse(self, request, response):
+        for a in response.xpath('//a[@class="title"]'):
+            item = mw.Item()
+            item.table_name = "news"
+            item.title = a.xpath("./text()").extract_first()
+            item.url = response.urljoin(a.xpath("./@href").extract_first())
+            yield item
+
+
+if __name__ == "__main__":
+    NewsSpider().start()
+```
+
+或用脚手架：
+
+```bash
+mineworker create -p news_crawler
+cd news_crawler && python main.py
+```
+
+## 当前能力（0.3.0）
+
+- **AirSpider** —— 单进程、多线程、内存队列，跑通「请求 → 解析 → 落库」闭环并优雅退出
+- `Request` / `Response`（httpx + parsel）、自动重试、失败兜底钩子
+- `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB）、请求级 + Item 级去重（布隆 / 精确）
+- 浏览器渲染 `Request(render=True)`（Playwright 渲染池）
+- 下载中间件链、代理池接口
+- 指标（Prometheus exporter）、卡死 / 失败率告警（飞书 / 邮件）
+- CLI 脚手架、`shell` 调试、`retry` 回放
+
+分布式（Redis）、`TaskSpider` / `BatchSpider`、管理平台见 [Roadmap](roadmap.md)。

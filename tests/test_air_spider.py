@@ -296,6 +296,15 @@ def test_exception_request_hook_called_on_retry(httpserver: HTTPServer) -> None:
     assert seen == [1, 2]  # 每次重试前调用一次
 
 
+def test_debug_forces_single_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    class S(CrawlSpider):
+        pass
+
+    spider = S("http://127.0.0.1:1/never", debug=True)
+    assert spider.scheduler._thread_count == 1
+    assert setting.DEBUG is True
+
+
 def test_stop_exits_and_dumps_unfinished(
     httpserver: HTTPServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

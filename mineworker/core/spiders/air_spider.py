@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from mineworker import setting
 from mineworker.core.base_parser import BaseParser
 from mineworker.core.scheduler import AirScheduler
+from mineworker.utils.log import configure as _configure_log
 
 if TYPE_CHECKING:
     from mineworker.buffer.item_buffer import ItemHandler
@@ -22,9 +23,13 @@ class AirSpider(BaseParser):
         thread_count: int | None = None,
         item_handler: ItemHandler | None = None,
         pipelines: list[str] | None = None,
+        debug: bool = False,
     ) -> None:
         if self.__custom_setting__:
             setting.apply(self.__custom_setting__)
+        if debug:
+            setting.apply({"DEBUG": True, "LOG_LEVEL": "DEBUG"})
+            _configure_log()
         self._scheduler = AirScheduler(
             self,
             thread_count=thread_count,
