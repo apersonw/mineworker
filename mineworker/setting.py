@@ -37,14 +37,16 @@ LOG_RETENTION: str = "10 days"
 # ---- 调度 / 运行时 ----
 SPIDER_THREAD_COUNT: int = 4
 SPIDER_MAX_RETRY_TIMES: int = 3
-SPIDER_SLEEP_TIME: float = 0.0
-COLLECTOR_TASK_COUNT: int = 100
+SPIDER_RETRY_INTERVAL: float = 0.0  # 重试前等待（秒）
+COLLECTOR_TASK_COUNT: int = 100  # collector 单次从队列取多少任务
+REQUEST_BUFFER_MAX_CACHED: int = 1000  # RequestBuffer 达到此量立即 flush
+BUFFER_FLUSH_INTERVAL: float = 0.1  # RequestBuffer / ItemBuffer flush 轮询间隔
 DONE_CHECK_TIMES: int = 3  # 结束检测连续复查次数
-DONE_CHECK_INTERVAL: float = 1.0  # 每次复查间隔（秒）
+DONE_CHECK_INTERVAL: float = 0.5  # 每次复查间隔（秒）
+DUMP_UNFINISHED_ON_EXIT: bool = True  # 中断退出时把未完成请求 dump 到 FAILED_REQUEST_PATH
 
 # ---- 请求 ----
 REQUEST_TIMEOUT: float = 22.0
-REQUEST_RETRY_INTERVAL: float = 0.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
