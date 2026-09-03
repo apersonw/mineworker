@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 测试 / 类型检查 / lint 缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# 运行产物
+logs/
+*.log
+failed_items.jsonl
+failed_requests.jsonl
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+
+# 文档构建
+site/

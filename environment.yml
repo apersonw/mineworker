@@ -1,0 +1,10 @@
+# conda 开发环境：conda env create -f environment.yml && conda activate mineworker
+# 之后 pre-commit install
+name: mineworker
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -e .[dev]
