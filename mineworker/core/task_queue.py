@@ -33,6 +33,15 @@ class MemoryTaskQueue:
         except queue.Empty:
             return None
 
+    def get_batch(self, count: int) -> list[Request]:
+        out: list[Request] = []
+        for _ in range(max(1, count)):
+            try:
+                out.append(self._q.get_nowait()[2])
+            except queue.Empty:
+                break
+        return out
+
     def qsize(self) -> int:
         return self._q.qsize()
 

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mineworker import setting
 from mineworker.dedup import get_request_filter
 from mineworker.utils import stats as stats_keys
 
 if TYPE_CHECKING:
-    from mineworker.core.task_queue import MemoryTaskQueue
     from mineworker.dedup import Filter
     from mineworker.network.request import Request
     from mineworker.utils.stats import Stats
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 class RequestBuffer(threading.Thread):
     def __init__(
         self,
-        task_queue: MemoryTaskQueue,
+        task_queue: Any,
         stats: Stats,
         *,
         dedup: Filter | None = None,
@@ -47,6 +46,10 @@ class RequestBuffer(threading.Thread):
     def is_empty(self) -> bool:
         with self._lock:
             return not self._pending
+
+    def pending_count(self) -> int:
+        with self._lock:
+            return len(self._pending)
 
     # ------------------------------------------------------------------
     def flush(self) -> None:

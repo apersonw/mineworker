@@ -38,6 +38,12 @@ LOG_RETENTION: str = "10 days"
 SPIDER_THREAD_COUNT: int = 4
 SPIDER_MAX_RETRY_TIMES: int = 3
 SPIDER_RETRY_INTERVAL: float = 0.0  # 重试前等待（秒）
+
+# ---- 分布式 Spider ----
+SPIDER_KEEP_ALIVE: bool = False  # True = 爬完不退出，继续轮询队列（配合 TaskSpider / 常驻 worker）
+SPIDER_SEED_LOCK_TTL: int = 86400  # start_requests 一次性锁的 TTL（秒）
+HEARTBEAT_INTERVAL: float = 3.0  # 节点心跳写入间隔（秒）
+HEARTBEAT_STALE: float = 15.0  # 超过此秒数没心跳的节点视为已死
 COLLECTOR_TASK_COUNT: int = 100  # collector 单次从队列取多少任务
 REQUEST_BUFFER_MAX_CACHED: int = 1000  # RequestBuffer 达到此量立即 flush
 BUFFER_FLUSH_INTERVAL: float = 0.1  # RequestBuffer / ItemBuffer flush 轮询间隔

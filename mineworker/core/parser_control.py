@@ -20,8 +20,10 @@ if TYPE_CHECKING:
     from mineworker.buffer.item_buffer import ItemBuffer
     from mineworker.buffer.request_buffer import RequestBuffer
     from mineworker.core.base_parser import BaseParser
-    from mineworker.core.collector import MemoryCollector
+    from mineworker.core.collector import Collector
     from mineworker.utils.stats import Stats
+
+_FailedSink = Callable[[Request], None]
 
 log = get_logger("worker")
 
@@ -34,11 +36,12 @@ class ParserWorker(threading.Thread):
         index: int,
         *,
         parser: BaseParser,
-        collector: MemoryCollector,
+        collector: Collector,
         request_buffer: RequestBuffer,
         item_buffer: ItemBuffer,
         stats: Stats,
         middleware: MiddlewareManager | None = None,
+        failed_sink: _FailedSink | None = None,
     ) -> None:
         super().__init__(name=f"worker-{index}", daemon=True)
         self._parser = parser
@@ -47,6 +50,7 @@ class ParserWorker(threading.Thread):
         self._item_buffer = item_buffer
         self._stats = stats
         self._middleware = middleware or MiddlewareManager()
+        self._failed_sink = failed_sink
         self._stop_event = threading.Event()
         self.busy = False
 
@@ -196,6 +200,11 @@ class ParserWorker(threading.Thread):
             self._dispatch(self._parser.failed_request(request, response))
         except Exception:
             log.exception("failed_request 钩子异常")
+        if self._failed_sink is not None:
+            try:
+                self._failed_sink(request)
+            except Exception:
+                log.exception("failed_sink 异常")
 
     def _drop(self, request: Request) -> None:
         self._stats.incr(sk.DROPPED)

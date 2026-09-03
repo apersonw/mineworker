@@ -43,14 +43,15 @@ mineworker create -p news_crawler
 cd news_crawler && python main.py
 ```
 
-## 当前能力（0.3.0）
+## 当前能力
 
 - **AirSpider** —— 单进程、多线程、内存队列，跑通「请求 → 解析 → 落库」闭环并优雅退出
+- **Spider** —— [Redis 分布式](distributed.md)：多进程 / 多机共享队列与去重、断点续爬、多节点心跳
 - `Request` / `Response`（httpx + parsel）、自动重试、失败兜底钩子
-- `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB）、请求级 + Item 级去重（布隆 / 精确）
+- `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB）、请求级 + Item 级去重（内存 / Redis 布隆 / 精确）
 - 浏览器渲染 `Request(render=True)`（Playwright 渲染池）
 - 下载中间件链、代理池接口
 - 指标（Prometheus exporter）、卡死 / 失败率告警（飞书 / 邮件）
 - CLI 脚手架、`shell` 调试、`retry` 回放
 
-分布式（Redis）、`TaskSpider` / `BatchSpider`、管理平台见 [Roadmap](roadmap.md)。
+`TaskSpider` / 账号池 / MySQL 管道见 [Roadmap](roadmap.md)。

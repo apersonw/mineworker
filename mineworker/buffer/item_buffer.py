@@ -85,6 +85,10 @@ class ItemBuffer(threading.Thread):
         with self._lock:
             return not self._pending
 
+    def pending_count(self) -> int:
+        with self._lock:
+            return len(self._pending)
+
     def run(self) -> None:
         while not self._stop_event.wait(setting.BUFFER_FLUSH_INTERVAL):
             self.flush()

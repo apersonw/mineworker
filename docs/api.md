@@ -4,6 +4,10 @@
     options:
       members: [start, stop]
 
+::: mineworker.Spider
+    options:
+      members: [start, stop]
+
 ::: mineworker.BaseParser
 
 ::: mineworker.Request

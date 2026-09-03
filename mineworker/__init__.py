@@ -6,6 +6,7 @@
     - 异常层级                 MineWorkerError 及其子类
     - `Request` / `Response`      网络层
     - `AirSpider` / `BaseParser`  轻量单机运行时（含浏览器渲染、中间件、代理池、指标、告警）
+    - `Spider`                    Redis 分布式（多进程 / 多机 + 断点续爬，需 mineworker[redis]）
     - `Item` / `UpdateItem`       结构化数据 + 管道落库 + 去重
 """
 
@@ -15,6 +16,7 @@ from mineworker import setting
 from mineworker.__about__ import __version__
 from mineworker.core.base_parser import BaseParser
 from mineworker.core.spiders.air_spider import AirSpider
+from mineworker.core.spiders.spider import Spider
 from mineworker.exceptions import (
     ConfigError,
     DedupError,
@@ -50,6 +52,7 @@ __all__ = [
     "RequestError",
     "Response",
     "ResponseError",
+    "Spider",
     "SpiderError",
     "UpdateItem",
     "ValidationError",
