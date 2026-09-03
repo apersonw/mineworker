@@ -51,15 +51,17 @@ RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
 # ---- Item / 管道 ----
-ITEM_MAX_CACHED_COUNT: int = 5000
-ITEM_UPLOAD_INTERVAL: float = 1.0
+ITEM_MAX_CACHED_COUNT: int = 5000  # ItemBuffer 达到此量立即 flush
 ITEM_PIPELINES: list[str] = ["mineworker.pipelines.console.ConsolePipeline"]
+ITEM_DEFAULT_TABLE: str = "items"  # 直接 yield dict（非 Item）时落库的表名
+ITEM_FILTER_ENABLE: bool = True  # 是否对 Item 做去重（按 fingerprint）
+CSV_OUTPUT_DIR: str = "."  # CsvPipeline 输出目录
 FAILED_ITEM_PATH: str = "failed_items.jsonl"
 FAILED_REQUEST_PATH: str = "failed_requests.jsonl"
 
 # ---- 去重 ----
-DEDUP_FILTER: str = "memory"  # memory | lite
-DEDUP_TO_MD5: bool = True
+DEDUP_FILTER: str = "memory"  # memory（布隆）| lite（精确 set）
+DEDUP_TO_MD5: bool = True  # Dedup 直接传入原始值时是否先 md5
 DEDUP_ERROR_RATE: float = 1e-6
 DEDUP_INITIAL_CAPACITY: int = 1_000_000
 

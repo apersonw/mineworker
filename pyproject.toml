@@ -46,6 +46,7 @@ dev = [
     "pytest-cov>=5",
     "respx>=0.21",
     "pytest-httpserver>=1.0",
+    "mongomock>=4.1",
     "ruff>=0.6",
     "mypy>=1.11",
     "pre-commit>=3.7",

@@ -4,11 +4,9 @@
     - `setting`               分层配置（框架默认 ← 项目 setting.py ← 环境变量 MINEWORKER_*）
     - `get_logger`            基于 loguru 的日志
     - 异常层级                 MineWorkerError 及其子类
-    - `Request` / `Response`   网络层（阶段 01）
+    - `Request` / `Response`      网络层（阶段 01）
     - `AirSpider` / `BaseParser`  轻量单机运行时（阶段 02）
-
-后续阶段将在此导出：
-    阶段 03  Item / UpdateItem
+    - `Item` / `UpdateItem`       结构化数据 + 管道落库（阶段 03）
 """
 
 from __future__ import annotations
@@ -29,6 +27,7 @@ from mineworker.exceptions import (
     SpiderError,
     ValidationError,
 )
+from mineworker.network.item import Item, UpdateItem
 from mineworker.network.request import Request
 from mineworker.network.response import Response
 from mineworker.utils.log import get_logger, log
@@ -42,6 +41,7 @@ __all__ = [
     "BaseParser",
     "ConfigError",
     "DedupError",
+    "Item",
     "ItemError",
     "MineWorkerError",
     "NotRetryError",
@@ -51,6 +51,7 @@ __all__ = [
     "Response",
     "ResponseError",
     "SpiderError",
+    "UpdateItem",
     "ValidationError",
     "__version__",
     "get_logger",

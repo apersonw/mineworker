@@ -21,10 +21,16 @@ class AirSpider(BaseParser):
         *,
         thread_count: int | None = None,
         item_handler: ItemHandler | None = None,
+        pipelines: list[str] | None = None,
     ) -> None:
         if self.__custom_setting__:
             setting.apply(self.__custom_setting__)
-        self._scheduler = AirScheduler(self, thread_count=thread_count, item_handler=item_handler)
+        self._scheduler = AirScheduler(
+            self,
+            thread_count=thread_count,
+            item_handler=item_handler,
+            pipelines=pipelines,
+        )
 
     def start(self) -> None:
         """启动爬虫，阻塞至结束。"""

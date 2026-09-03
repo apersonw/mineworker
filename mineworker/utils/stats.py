@@ -13,6 +13,8 @@ PARSE_ERROR = "parse_error"
 DEDUP_DROPPED = "dedup_dropped"
 DROPPED = "dropped"
 ITEM = "item"
+ITEM_DEDUP_DROPPED = "item_dedup_dropped"
+ITEM_FAILED = "item_failed"
 
 
 class Stats:
@@ -44,6 +46,7 @@ class Stats:
         return (
             f"用时 {elapsed:.1f}s | 请求成功 {ok} 失败 {d.get(REQUEST_FAILED, 0)} "
             f"| 重试 {d.get(RETRY, 0)} 丢弃 {d.get(DROPPED, 0)} "
-            f"| 去重拦截 {d.get(DEDUP_DROPPED, 0)} | 解析异常 {d.get(PARSE_ERROR, 0)} "
-            f"| 产出 {d.get(ITEM, 0)} 条 | {rate:.1f} 请求/s"
+            f"| 请求去重 {d.get(DEDUP_DROPPED, 0)} | 解析异常 {d.get(PARSE_ERROR, 0)} "
+            f"| 入库 {d.get(ITEM, 0)} 条（去重 {d.get(ITEM_DEDUP_DROPPED, 0)}，"
+            f"失败 {d.get(ITEM_FAILED, 0)}）| {rate:.1f} 请求/s"
         )

@@ -36,13 +36,14 @@ class AirScheduler:
         *,
         thread_count: int | None = None,
         item_handler: ItemHandler | None = None,
+        pipelines: list[str] | None = None,
     ) -> None:
         self._parser = parser
         self._thread_count = thread_count or setting.SPIDER_THREAD_COUNT
         self.stats = Stats()
         self._task_queue = MemoryTaskQueue()
         self._request_buffer = RequestBuffer(self._task_queue, self.stats)
-        self._item_buffer = ItemBuffer(self.stats, handler=item_handler)
+        self._item_buffer = ItemBuffer(self.stats, handler=item_handler, pipelines=pipelines)
         self._collector = MemoryCollector(self._task_queue)
         self._workers: list[ParserWorker] = []
         self._stop_event = threading.Event()
@@ -127,6 +128,7 @@ class AirScheduler:
         self._item_buffer.join(timeout=_JOIN_TIMEOUT)
         self._request_buffer.flush()
         self._item_buffer.flush()
+        self._item_buffer.close()
         self._restore_signal()
         close_default_downloaders()
         if self._interrupted and setting.DUMP_UNFINISHED_ON_EXIT:
