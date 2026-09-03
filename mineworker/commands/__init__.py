@@ -1,1 +1,4 @@
-"""命令行入口。阶段 05 用 typer 重写；当前 cmdline.py 为 argparse 占位实现。"""
+"""命令行（阶段 05）：typer 应用 + create / shell / retry 子命令。
+
+需要 ``pip install mineworker[cli]``（typer + jinja2）。
+"""

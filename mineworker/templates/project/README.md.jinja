@@ -1,0 +1,30 @@
+# {{ project_name }}
+
+基于 [MineWorker](https://github.com/Lucas/mineworker) 的爬虫项目。
+
+## 运行
+
+```bash
+pip install mineworker           # 或 mineworker[all]
+python main.py
+```
+
+## 结构
+
+```
+{{ project_name }}/
+├── main.py                入口
+├── setting.py             项目配置（自动加载）
+├── spiders/
+│   └── {{ spider_module }}.py
+└── items/                 Item 定义（可选，直接 yield dict 也行）
+```
+
+## 常用命令
+
+```bash
+mineworker create -s NewsSpider     # 新增一个爬虫到 ./spiders/
+mineworker create -i NewsItem       # 新增一个 Item 到 ./items/
+mineworker shell https://example.com   # 交互式调试选择器
+mineworker retry --items            # 回放写库失败的数据
+```

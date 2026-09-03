@@ -1,0 +1,13 @@
+import mineworker as mw
+
+
+class {{ class_name }}(mw.Item):
+    """{{ class_name }}。用法：item = {{ class_name }}(); item.xxx = ...; yield item"""
+
+    __table_name__ = "{{ table_name }}"
+    # 参与去重的字段（留空则用全部非空字段）；配合去重可实现「重跑不重复入库」
+    __unique_key__ = []
+
+    def pre_to_db(self):
+        # 落库前的字段清洗 / 补全，可选
+        pass

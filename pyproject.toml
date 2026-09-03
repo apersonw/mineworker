@@ -92,7 +92,7 @@ files = ["mineworker"]
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["parsel.*", "bitarray.*", "w3lib.*", "bs4.*"]
+module = ["parsel.*", "bitarray.*", "w3lib.*", "bs4.*", "IPython.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------

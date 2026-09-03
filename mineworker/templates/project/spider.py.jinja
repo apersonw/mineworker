@@ -1,0 +1,21 @@
+import mineworker as mw
+
+
+class {{ spider_class }}(mw.AirSpider):
+    def start_requests(self):
+        yield mw.Request("https://example.com", callback=self.parse)
+
+    def parse(self, request, response):
+        item = mw.Item()
+        item.table_name = "{{ project_name }}"
+        item.url = request.url
+        item.title = response.xpath("//title/text()").extract_first()
+        yield item
+
+        # 跟进链接示例：
+        # for href in response.xpath("//a/@href").extract():
+        #     yield mw.Request(response.urljoin(href), callback=self.parse_detail)
+
+
+if __name__ == "__main__":
+    {{ spider_class }}().start()
