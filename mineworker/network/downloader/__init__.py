@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 from mineworker.network.downloader._httpx import HttpxDownloader
@@ -23,15 +24,32 @@ __all__ = [
 ]
 
 _defaults: dict[str, Downloader] = {}
+_lock = threading.Lock()
 
 
 def get_default_downloader(request: Request) -> Downloader:
     if request.render:
-        raise NotImplementedError("浏览器渲染（render=True）在阶段 04 提供，当前仅支持 httpx 下载")
-    key = "httpx-session" if request.use_session else "httpx"
-    if key not in _defaults:
-        _defaults[key] = HttpxDownloader(use_session=bool(request.use_session))
-    return _defaults[key]
+        key = "playwright"
+    elif request.use_session:
+        key = "httpx-session"
+    else:
+        key = "httpx"
+    downloader = _defaults.get(key)
+    if downloader is None:
+        with _lock:
+            downloader = _defaults.get(key)
+            if downloader is None:
+                downloader = _build(key, request)
+                _defaults[key] = downloader
+    return downloader
+
+
+def _build(key: str, request: Request) -> Downloader:
+    if key == "playwright":
+        from mineworker.network.downloader._playwright import PlaywrightDownloader
+
+        return PlaywrightDownloader()
+    return HttpxDownloader(use_session=bool(request.use_session))
 
 
 def download_request(request: Request, downloader: Downloader | None = None) -> Response:

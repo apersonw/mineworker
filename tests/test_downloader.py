@@ -101,10 +101,11 @@ def test_session_downloader_reuses_client() -> None:
     assert downloader._client is not None
 
 
-@respx.mock
-def test_render_true_not_supported_yet() -> None:
-    with pytest.raises(NotImplementedError, match="阶段 04"):
-        Request("https://example.com/", render=True).download()
+def test_render_true_routes_to_playwright_downloader() -> None:
+    from mineworker.network.downloader._playwright import PlaywrightDownloader
+
+    dl = get_default_downloader(Request("https://example.com/", render=True))
+    assert isinstance(dl, PlaywrightDownloader)
 
 
 @respx.mock

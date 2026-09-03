@@ -72,15 +72,20 @@ MONGO_DB: str = "mineworker"
 # ---- Redis（Roadmap v2 预留）----
 REDIS_URL: str = "redis://localhost:6379/0"
 
-# ---- 浏览器渲染 ----
+# ---- 浏览器渲染（render=True，需 pip install mineworker[render]）----
 WEBDRIVER: dict[str, Any] = {
-    "pool_size": 1,
+    "pool_size": 1,  # 并发浏览器数（独立渲染线程，各自持有一个 chromium）
+    "browser": "chromium",  # chromium | firefox | webkit
     "headless": True,
-    "load_images": False,
-    "timeout": 30,
-    "render_time": 0,
+    "load_images": False,  # 拦截图片 / 字体 / 媒体，加速
+    "timeout": 30,  # 秒，页面加载 / 等待选择器超时
+    "render_time": 0,  # 加载后额外等待秒数
+    "wait_until": "domcontentloaded",  # load | domcontentloaded | networkidle | commit
+    "wait_for": None,  # 全局等待的 CSS 选择器（Request.wait_for 可覆盖）
     "user_agent": None,
-    "proxy": None,
+    "proxy": None,  # http://user:pass@host:port
+    "stealth": True,  # 注入基础反检测脚本
+    "viewport": [1920, 1080],
 }
 
 # ---- 告警 ----

@@ -54,6 +54,8 @@ class Request:
         random_user_agent: bool | None = None,
         render: bool = False,
         render_time: float | None = None,
+        wait_for: str | None = None,
+        render_script: Callable[[Any], Any] | None = None,
         download_midware: str | None = None,
         parser_name: str | None = None,
         cb_kwargs: dict[str, Any] | None = None,
@@ -70,6 +72,9 @@ class Request:
         self.random_user_agent = random_user_agent
         self.render = render
         self.render_time = render_time
+        self.wait_for = wait_for
+        #: 渲染后在浏览器线程里执行的自定义脚本 (page) -> None，不参与序列化
+        self.render_script = render_script
         self.download_midware = download_midware
         self.parser_name = parser_name
         self.cb_kwargs: dict[str, Any] = cb_kwargs or {}
@@ -129,6 +134,7 @@ class Request:
         "random_user_agent",
         "render",
         "render_time",
+        "wait_for",
         "download_midware",
         "parser_name",
         "cb_kwargs",
@@ -160,6 +166,7 @@ class Request:
         new = Request.from_dict(self.to_dict())
         if callable(self.callback):
             new.callback = self.callback
+        new.render_script = self.render_script
         return new
 
     # ------------------------------------------------------------------

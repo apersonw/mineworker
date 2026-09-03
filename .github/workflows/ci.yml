@@ -41,5 +41,7 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
+      - name: install chromium
+        run: python -m playwright install --with-deps chromium
       - name: pytest
         run: pytest -ra --cov --cov-report=term-missing

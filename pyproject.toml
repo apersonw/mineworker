@@ -99,6 +99,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --strict-markers"
+markers = ["render: 需要 Playwright + chromium（playwright install chromium）"]
 
 [tool.coverage.run]
 source = ["mineworker"]
