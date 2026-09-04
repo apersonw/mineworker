@@ -28,7 +28,7 @@ jobs:
       # mkdocstrings 要 import mineworker 才能生成 API 页，所以装本体
       - run: pip install -e ".[docs,all]"
       - run: mkdocs build --strict
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -40,4 +40,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

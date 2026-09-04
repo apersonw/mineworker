@@ -81,7 +81,7 @@ jobs:
           test "$(/tmp/smoke/bin/python -c 'import mineworker; print(mineworker.__version__)')" \
              = "${{ steps.meta.outputs.version }}"
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -95,7 +95,7 @@ jobs:
     permissions:
       id-token: write # Trusted Publishing 用，不需要任何 token
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with: { name: dist, path: dist }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -110,7 +110,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with: { name: dist, path: dist }
       - uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -123,7 +123,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with: { name: dist, path: dist }
 
       - name: 从 CHANGELOG 抽取本版本段落
