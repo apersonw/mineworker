@@ -31,6 +31,13 @@
 
 - `cb_kwargs` 从未传给 callback（`parser_control` 现在按 `callback(request, response, **request.cb_kwargs)` 调用）
 - `BaseScheduler.run()` 中 `_seed()` 移到 `_start_threads()` 之前，避免 worker 抢跑断点续爬遗留的队列
+- **刚启动的机器 / 容器上第一条告警被静默吞掉**：`AlertManager` 用 `0.0` 当「从没发过」的哨兵，
+  而 `time.monotonic()` 的原点是开机，`now - 0.0 < WARNING_INTERVAL` 在低 uptime 时恒真。
+  现在用「key 缺席」表示从没发过
+- **同源问题让代理池在新容器里起不来**：`ApiProxyPool` 的 `_last_fetch` 初值 `0.0` 会让第一次
+  拉取代理被间隔限流跳过，池子一直是空的。现在初值为 `None`
+- 只装核心包（不带 `[cli]`）时执行 `mineworker` 会抛 `ModuleNotFoundError` 堆栈，
+  现在提示 `pip install "mineworker[cli]"`
 
 ### 变更
 

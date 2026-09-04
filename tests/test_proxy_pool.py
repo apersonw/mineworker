@@ -43,6 +43,26 @@ def test_api_pool_fetches_and_rotates() -> None:
 
 
 @respx.mock
+def test_first_fetch_not_suppressed_by_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """「从没抓过」必须能抓 —— 否则刚启动的容器里代理池永远是空的。
+
+    间隔取一个比任何 uptime 都大的值：`monotonic()` 原点是开机，一旦拿 0.0 当
+    「从没抓过」的哨兵，`now - 0.0 < PROXY_MIN_INTERVAL` 就恒真，第一次抓取被吞。
+    这么写不用改动全局时钟，且在任何 uptime 的机器上都能复现。
+    """
+    monkeypatch.setattr(setting, "PROXY_MIN_INTERVAL", 1e12)
+    route = respx.get("https://fresh/l").mock(return_value=httpx.Response(200, text="1.1.1.1:80"))
+
+    pool = ApiProxyPool("https://fresh/l")
+
+    assert pool.get_proxy() == "http://1.1.1.1:80"
+    assert route.call_count == 1
+
+    pool.get_proxy()  # 已经抓过，间隔内不该再打接口
+    assert route.call_count == 1
+
+
+@respx.mock
 def test_report_bad_excludes_proxy() -> None:
     respx.get("https://p/l").mock(return_value=httpx.Response(200, text="1.1.1.1:80\n2.2.2.2:80"))
     pool = ApiProxyPool("https://p/l")

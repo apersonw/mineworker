@@ -105,7 +105,10 @@ class AlertManager:
 
     def _fire(self, key: str, title: str, message: str) -> None:
         now = time.monotonic()
-        if now - self._last_sent.get(key, 0.0) < setting.WARNING_INTERVAL:
+        # 「从没发过」必须用 key 缺席表示，不能拿 0.0 当哨兵：time.monotonic() 的原点是开机，
+        # 刚启动的机器 / 容器上 now 很小，now - 0.0 < WARNING_INTERVAL 会把第一条告警吞掉。
+        last = self._last_sent.get(key)
+        if last is not None and now - last < setting.WARNING_INTERVAL:
             return
         self._last_sent[key] = now
         for notifier in self._notifiers:

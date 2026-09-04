@@ -86,6 +86,28 @@ def test_alert_dedup_within_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sum("失败请求过多" in t for t, _ in spy.calls) == 1
 
 
+def test_first_alert_not_suppressed_by_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """「从没发过」必须能发 —— 否则刚启动的容器里第一条告警被静默吞掉。
+
+    间隔取一个比任何 uptime 都大的值：`monotonic()` 原点是开机，一旦拿 0.0 当
+    「从没发过」的哨兵，`now - 0.0 < WARNING_INTERVAL` 就恒真。开发机 uptime 动辄
+    好几天，所以这个 bug 只在 CI / 新起的容器上现形。
+    """
+    monkeypatch.setattr(setting, "WARNING_INTERVAL", 1e12)
+    monkeypatch.setattr(setting, "WARNING_FAILED_COUNT", 1)
+
+    stats = Stats()
+    stats.incr("request_failed", 5)
+    spy = Spy()
+    mgr = AlertManager(stats, [spy])
+    mgr.check()
+
+    assert sum("失败请求过多" in t for t, _ in spy.calls) == 1
+
+    mgr.check()  # 同一间隔内不应再发
+    assert sum("失败请求过多" in t for t, _ in spy.calls) == 1
+
+
 def test_warning_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(setting, "WARNING_ENABLE", False)
     monkeypatch.setattr(setting, "WARNING_FAILED_COUNT", 1)

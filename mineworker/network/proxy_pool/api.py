@@ -29,15 +29,18 @@ class ApiProxyPool(ProxyPool):
         self._pool: deque[str] = deque()
         self._use_count: dict[str, int] = {}
         self._bad: set[str] = set()
-        self._last_fetch = 0.0
+        # None = 从没抓过。不能用 0.0 当哨兵：monotonic 的原点是开机，刚启动的容器上
+        # monotonic() - 0.0 < PROXY_MIN_INTERVAL 会把第一次抓取跳过，代理池起不来。
+        self._last_fetch: float | None = None
 
     # ------------------------------------------------------------------
     def _fetch(self) -> None:
         if not self._api:
             return
-        if time.monotonic() - self._last_fetch < setting.PROXY_MIN_INTERVAL:
+        now = time.monotonic()
+        if self._last_fetch is not None and now - self._last_fetch < setting.PROXY_MIN_INTERVAL:
             return
-        self._last_fetch = time.monotonic()
+        self._last_fetch = now
         try:
             body = httpx.get(self._api, timeout=10).text.strip()
         except httpx.HTTPError as exc:
