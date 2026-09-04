@@ -48,6 +48,7 @@ cd news_crawler && python main.py
 - **AirSpider** —— 单进程、多线程、内存队列，跑通「请求 → 解析 → 落库」闭环并优雅退出
 - **Spider** —— [Redis 分布式](distributed.md)：多进程 / 多机共享队列与去重、断点续爬、多节点心跳
 - **TaskSpider** —— [从任务源持续消费](distributed.md#taskspider)（Redis / DB），多节点分摊
+- **BatchSpider** —— [周期性批次采集](batch-spider.md)：MySQL 任务表 + 批次记录 + 进度 / 防丢，master / worker 分离
 - `Request` / `Response`（httpx + parsel）、自动重试、失败兜底钩子；可选[异步下载器](async-kernel.md)（共享连接池 / HTTP/2）
 - `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB / [MySQL](item-pipeline.md#mysql)）、请求级 + Item 级去重（内存 / Redis 布隆 / 精确）
 - 浏览器渲染 `Request(render=True)`（Playwright 渲染池）

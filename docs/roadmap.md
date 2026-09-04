@@ -9,12 +9,12 @@
 - **v2.4** —— [账号 / Cookie 池](user-pool.md)：`LocalUserPool` / `GuestUserPool` / `RedisUserPool`；`user_pool()` + `check_login()` 钩子，掉登录自动换号重试
 - **v2.5** —— [MySQL 管道](item-pipeline.md#mysql)：`MysqlPipeline`（`executemany` + `ON DUPLICATE KEY UPDATE` upsert）+ `mineworker create -i --table` 读 `SHOW FULL COLUMNS` 反射生成 Item
 - **v2.6** —— [async 内核评估](async-kernel.md)：结论**不做全量 async 重写**（投入产出比不成立、破坏 feapder 心智兼容）；落地隔离的 `AsyncHttpxDownloader`（`DOWNLOADER_ASYNC=True`，事件循环线程 + 共享 `AsyncClient`，API 零改动）+ `HTTPX_HTTP2` 开关
+- **v2.7** —— [`BatchSpider`](batch-spider.md)：MySQL 任务表状态机 + 批次记录表 + 周期批次调度 + 进度追踪 + 任务防丢；master（`start_monitor`）/ worker（`start`）分离，抽象 `BatchStore`（`MysqlBatchStore` / `MemoryBatchStore`）
 
 ## 计划中
 
 | 能力 | 说明 |
 |---|---|
-| **`BatchSpider`** | 批次记录表、进度追踪、定时批次、任务防丢 |
 | **管理平台** | 部署 / 调度 / 日志 / 报警 Web UI |
 
 ## 设计约束

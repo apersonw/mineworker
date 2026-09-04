@@ -23,6 +23,7 @@ nav:
   - 快速开始: quickstart.md
   - 编写爬虫: spider.md
   - 分布式: distributed.md
+  - 批次采集: batch-spider.md
   - 数据与去重: item-pipeline.md
   - 浏览器渲染: render.md
   - 中间件与代理: middleware-proxy.md

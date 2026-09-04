@@ -12,6 +12,16 @@
     options:
       members: [task_requests, fetch_tasks, add_tasks, push_tasks, start, stop]
 
+::: mineworker.BatchSpider
+    options:
+      members: [task_requests, update_task, failed_request, start, start_monitor, stop]
+
+::: mineworker.core.batch_store.BatchStore
+
+::: mineworker.core.batch_monitor.BatchMonitor
+    options:
+      members: [run, run_once, stop]
+
 ::: mineworker.BaseParser
 
 ::: mineworker.Request

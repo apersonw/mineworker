@@ -76,6 +76,18 @@ class MysqlDB:
         finally:
             conn.close()
 
+    def insert(self, sql: str, args: Any = None) -> int:
+        """执行一条 INSERT，返回自增主键（``cursor.lastrowid``）。"""
+        conn = self._pool.connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, args)
+                rowid = cur.lastrowid
+            conn.commit()
+            return int(rowid or 0)
+        finally:
+            conn.close()
+
     def executemany(self, sql: str, args_list: Any) -> int:
         rows = list(args_list)
         if not rows:

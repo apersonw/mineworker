@@ -8,6 +8,7 @@
     - `AirSpider` / `BaseParser`  轻量单机运行时（含浏览器渲染、中间件、代理池、指标、告警）
     - `Spider`                    Redis 分布式（多进程 / 多机 + 断点续爬，需 mineworker[redis]）
     - `TaskSpider`                从任务源（Redis / DB）持续拉任务来爬
+    - `BatchSpider`               周期性批次采集（MySQL 任务表 + 批次记录 + 进度 / 防丢）
     - `Item` / `UpdateItem`       结构化数据 + 管道落库 + 去重
 """
 
@@ -17,6 +18,7 @@ from mineworker import setting
 from mineworker.__about__ import __version__
 from mineworker.core.base_parser import BaseParser
 from mineworker.core.spiders.air_spider import AirSpider
+from mineworker.core.spiders.batch_spider import BatchSpider
 from mineworker.core.spiders.spider import Spider
 from mineworker.core.spiders.task_spider import TaskSpider
 from mineworker.exceptions import (
@@ -50,6 +52,7 @@ get_logger()
 __all__ = [
     "AirSpider",
     "BaseParser",
+    "BatchSpider",
     "ConfigError",
     "DedupError",
     "GuestUserPool",

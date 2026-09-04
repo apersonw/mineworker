@@ -49,6 +49,16 @@ HEARTBEAT_STALE: float = 15.0  # 超过此秒数没心跳的节点视为已死
 TASK_POLL_INTERVAL: float = 2.0  # 轮询任务源的间隔（秒）
 TASK_BATCH_SIZE: int = 100  # 单次拉取多少个任务
 TASK_EXHAUST_POLLS: int = 3  # 连续这么多次拉不到任务，视为任务耗尽（keep_alive=False 时据此退出）
+
+# ---- BatchSpider（批次采集，需 pip install "mineworker[redis,mysql]"）----
+BATCH_INTERVAL: float = 7.0  # 批次间隔
+BATCH_INTERVAL_UNIT: str = "day"  # day | hour
+BATCH_MONITOR_INTERVAL: float = 10.0  # master 巡检间隔（秒）
+BATCH_LOST_TASK_STALE: float = 600.0  # 任务卡在「处理中」超过这么久 → 重置回「待处理」
+BATCH_PUSH_LIMIT: int = 5000  # master 单次最多认领 / 推送多少任务
+BATCH_TASK_ID_FIELD: str = "id"  # 任务表主键列名
+BATCH_TASK_STATE_FIELD: str = "batch_status"  # 状态列（0 待处理 / 1 完成 / 2 处理中 / -1 失败）
+BATCH_TASK_TIME_FIELD: str = "update_time"  # 任务表更新时间列（防丢检测用）
 COLLECTOR_TASK_COUNT: int = 100  # collector 单次从队列取多少任务
 REQUEST_BUFFER_MAX_CACHED: int = 1000  # RequestBuffer 达到此量立即 flush
 BUFFER_FLUSH_INTERVAL: float = 0.1  # RequestBuffer / ItemBuffer flush 轮询间隔
