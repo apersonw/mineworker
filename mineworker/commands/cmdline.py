@@ -36,6 +36,14 @@ def create(
     project: Annotated[str | None, typer.Option("-p", "--project", help="生成项目脚手架")] = None,
     spider: Annotated[str | None, typer.Option("-s", "--spider", help="生成一个 AirSpider")] = None,
     item: Annotated[str | None, typer.Option("-i", "--item", help="生成一个 Item")] = None,
+    table: Annotated[
+        str | None,
+        typer.Option("--table", help="配合 -i：读该 MySQL 表结构反射字段"),
+    ] = None,
+    mysql: Annotated[
+        str | None,
+        typer.Option("--mysql", help="MySQL 连接串 mysql://user:pass@host/db（默认取 setting）"),
+    ] = None,
     setting_file: Annotated[bool, typer.Option("--setting", help="生成 setting.py")] = False,
     force: Annotated[bool, typer.Option("-f", "--force", help="覆盖已存在文件")] = False,
 ) -> None:
@@ -48,7 +56,7 @@ def create(
     elif spider:
         typer.echo(f"✓ {gen.create_spider(spider, force=force)}")
     elif item:
-        typer.echo(f"✓ {gen.create_item(item, force=force)}")
+        typer.echo(f"✓ {gen.create_item(item, force=force, table=table, mysql=mysql)}")
     elif setting_file:
         typer.echo(f"✓ {gen.create_setting(force=force)}")
     else:

@@ -1,0 +1,21 @@
+import mineworker as mw
+
+
+class {{ class_name }}(mw.Item):
+    """{{ class_name }}（表 `{{ table_name }}`，由 `mineworker create -i --table` 反射生成）。
+
+    用法：item = {{ class_name }}(); item.xxx = ...; yield item
+    """
+
+    __table_name__ = "{{ table_name }}"
+    # 参与去重的字段（默认取主键）；配合去重可实现「重跑不重复入库」
+    __unique_key__ = {{ unique_key }}
+
+    # ---- 表字段（仅作提示，不会写入 __dict__）----
+{%- for name, comment in fields %}
+    {{ name }}: object{% if comment %}  # {{ comment }}{% endif %}
+{%- endfor %}
+
+    def pre_to_db(self):
+        # 落库前的字段清洗 / 补全，可选
+        pass

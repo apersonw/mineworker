@@ -79,15 +79,56 @@ def create_spider(name: str, *, target_dir: Path | None = None, force: bool = Fa
     return path
 
 
-def create_item(name: str, *, target_dir: Path | None = None, force: bool = False) -> Path:
-    class_name, module, table = _item_names(name)
+def create_item(
+    name: str,
+    *,
+    target_dir: Path | None = None,
+    force: bool = False,
+    table: str | None = None,
+    mysql: Any = None,
+) -> Path:
+    class_name, module, derived_table = _item_names(name)
     path = (target_dir or Path()) / f"{module}.py"
-    _write(
-        path,
-        _render("item.py.jinja", class_name=class_name, table_name=table),
-        force=force,
-    )
+
+    if table:
+        db = _open_mysql(mysql)
+        try:
+            fields, unique = _reflect_table(db, table)
+        finally:
+            if mysql is None or isinstance(mysql, str):
+                db.close()
+        content = _render(
+            "item_fields.py.jinja",
+            class_name=class_name,
+            table_name=table,
+            fields=fields,
+            unique_key=repr(unique),
+        )
+    else:
+        content = _render("item.py.jinja", class_name=class_name, table_name=derived_table)
+
+    _write(path, content, force=force)
     return path
+
+
+def _open_mysql(mysql: Any) -> Any:
+    from mineworker.db.mysqldb import MysqlDB
+
+    if mysql is None:
+        return MysqlDB()
+    if isinstance(mysql, str):
+        return MysqlDB.from_url(mysql)
+    return mysql  # 已经是一个 db 对象（测试注入）
+
+
+def _reflect_table(db: Any, table: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """读 ``SHOW FULL COLUMNS`` 返回 ``([(字段名, 注释), ...], [主键字段, ...])``。"""
+    rows = db.query(f"SHOW FULL COLUMNS FROM `{table}`")
+    if not rows:
+        raise ValueError(f"表 {table!r} 不存在或没有列")
+    fields = [(r["Field"], str(r.get("Comment") or "").replace("\n", " ").strip()) for r in rows]
+    unique = [r["Field"] for r in rows if str(r.get("Key")) == "PRI"]
+    return fields, unique
 
 
 def create_setting(*, target_dir: Path | None = None, force: bool = False) -> Path:

@@ -14,6 +14,7 @@ ITEM_PIPELINES = [
     "mineworker.pipelines.console.ConsolePipeline",
     # "mineworker.pipelines.csv.CsvPipeline",
     # "mineworker.pipelines.mongo.MongoPipeline",
+    # "mineworker.pipelines.mysql.MysqlPipeline",
 ]
 ITEM_DEFAULT_TABLE = "items"
 
@@ -23,6 +24,13 @@ DEDUP_FILTER = "memory"  # memory（布隆，省内存）| lite（精确 set）
 # ---- MongoDB（用到 MongoPipeline 时）----
 # MONGO_URI = "mongodb://localhost:27017"
 # MONGO_DB = "{{ project_name }}"
+
+# ---- MySQL（用到 MysqlPipeline / create -i --table 时）----
+# MYSQL_HOST = "localhost"
+# MYSQL_PORT = 3306
+# MYSQL_USER = "root"
+# MYSQL_PASSWORD = ""
+# MYSQL_DB = "{{ project_name }}"
 
 # ---- 浏览器渲染（Request(render=True) 时）----
 # WEBDRIVER = dict(pool_size=1, headless=True, load_images=False, render_time=0)

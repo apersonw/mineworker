@@ -29,6 +29,7 @@ ITEM_PIPELINES = [
     "mineworker.pipelines.console.ConsolePipeline",
     "mineworker.pipelines.csv.CsvPipeline",
     "mineworker.pipelines.mongo.MongoPipeline",
+    "mineworker.pipelines.mysql.MysqlPipeline",
 ]
 ```
 
@@ -37,11 +38,36 @@ ITEM_PIPELINES = [
 | `ConsolePipeline` | 打日志，调试用 |
 | `CsvPipeline` | 按表写 `<CSV_OUTPUT_DIR>/<table>.csv`，首批数据决定表头 |
 | `MongoPipeline` | `insert_many`；`UpdateItem` 按 `__update_key__` 逐条 `update_one` upsert |
+| `MysqlPipeline` | `executemany` 批量写；`MYSQL_UPDATE_ON_DUPLICATE=True` 时用 `INSERT ... ON DUPLICATE KEY UPDATE` 按唯一键 upsert；`UpdateItem` 按 `__update_key__` 逐条 `UPDATE` |
 
 自定义：继承 `mineworker.pipelines.base.BasePipeline`，实现 `save_items(table, items) -> bool`
 （返回 `False` 该批会被 dump 到 `failed_items.jsonl`）。
 
 单个 Item 可覆盖管道：`item.pipelines = ["myproj.pipelines.SpecialPipeline"]`。
+
+## MySQL
+
+`pip install "mineworker[mysql]"`，连接信息走配置（`MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER`
+/ `MYSQL_PASSWORD` / `MYSQL_DB`），底层是 pymysql + DBUtils 连接池。
+
+```python
+ITEM_PIPELINES = ["mineworker.pipelines.mysql.MysqlPipeline"]
+```
+
+`save_items` 把一批数据拼成一条 `executemany`，字段以每批第一条为准（和 `CsvPipeline` 一致）。
+`MYSQL_UPDATE_ON_DUPLICATE=True`（默认）时带 `ON DUPLICATE KEY UPDATE`——表上有唯一键 /
+主键就是 upsert，配合 `__unique_key__` + 去重即可「重跑不重复入库」。
+
+### 用表结构反射生成 Item
+
+```bash
+mineworker create -i news --table news
+mineworker create -i news --table news --mysql mysql://root:pwd@10.0.0.2:3306/spider
+```
+
+读 `SHOW FULL COLUMNS FROM news`，生成的 Item 带 `__table_name__`、按主键填好
+`__unique_key__`，并把每个字段 + 注释列成提示（注解形式，不进 `__dict__`）。
+不加 `--mysql` 时用 `setting` 里的 MySQL 配置。
 
 ## 去重
 

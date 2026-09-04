@@ -8,12 +8,16 @@
 mineworker create -p news_crawler      # 项目脚手架
 mineworker create -s ProductSpider     # 一个 AirSpider（写到 ./product_spider.py）
 mineworker create -i ProductItem       # 一个 Item
+mineworker create -i news --table news  # 读 MySQL 表结构反射字段（需 [mysql]）
 mineworker create --setting            # 一份注释齐全的 setting.py
 mineworker create -s Foo --force       # 覆盖已存在文件
 ```
 
 名字会自动转换：`product-list` / `product_list` / `ProductList` 都能识别，
 生成 `class ProductListSpider` + 文件 `product_list_spider.py`。
+
+`-i --table <表名>` 会连 MySQL 读 `SHOW FULL COLUMNS`，按主键填 `__unique_key__` 并把字段
++ 注释列进 Item。连接默认取 `setting` 的 `MYSQL_*`，也可 `--mysql mysql://user:pwd@host:3306/db` 覆盖。
 
 ## shell
 

@@ -91,6 +91,15 @@ DEDUP_INITIAL_CAPACITY: int = 1_000_000
 MONGO_URI: str = "mongodb://localhost:27017"
 MONGO_DB: str = "mineworker"
 
+# ---- MySQL（MysqlPipeline / create -i --table，需 pip install mineworker[mysql]）----
+MYSQL_HOST: str = "localhost"
+MYSQL_PORT: int = 3306
+MYSQL_USER: str = "root"
+MYSQL_PASSWORD: str = ""
+MYSQL_DB: str = "mineworker"
+MYSQL_POOL_SIZE: int = 5
+MYSQL_UPDATE_ON_DUPLICATE: bool = True  # save_items 用 INSERT ... ON DUPLICATE KEY UPDATE
+
 # ---- Redis（分布式 Spider / 持久化去重）----
 REDIS_URL: str = "redis://localhost:6379/0"
 REDIS_KEY_PREFIX: str = "mineworker"  # 所有 Redis key 的命名空间前缀

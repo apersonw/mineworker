@@ -7,10 +7,10 @@
 
 ```bash
 pip install mineworker            # 核心
-pip install "mineworker[all]"     # 含浏览器渲染 / MongoDB / Redis / CLI / 指标
+pip install "mineworker[all]"     # 含浏览器渲染 / MongoDB / MySQL / Redis / CLI / 指标
 ```
 
-按需选择：`mineworker[render]`（Playwright）、`[mongo]`、`[redis]`、`[cli]`、`[metrics]`。
+按需选择：`mineworker[render]`（Playwright）、`[mongo]`、`[mysql]`、`[redis]`、`[cli]`、`[metrics]`。
 
 ## 30 秒示例
 
@@ -49,10 +49,10 @@ cd news_crawler && python main.py
 - **Spider** —— [Redis 分布式](distributed.md)：多进程 / 多机共享队列与去重、断点续爬、多节点心跳
 - **TaskSpider** —— [从任务源持续消费](distributed.md#taskspider)（Redis / DB），多节点分摊
 - `Request` / `Response`（httpx + parsel）、自动重试、失败兜底钩子
-- `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB）、请求级 + Item 级去重（内存 / Redis 布隆 / 精确）
+- `Item` / `UpdateItem`、`Pipeline`（Console / CSV / MongoDB / [MySQL](item-pipeline.md#mysql)）、请求级 + Item 级去重（内存 / Redis 布隆 / 精确）
 - 浏览器渲染 `Request(render=True)`（Playwright 渲染池）
 - 下载中间件链、代理池接口、[账号 / Cookie 池](user-pool.md)（掉登录自动换号）
 - 指标（Prometheus exporter）、卡死 / 失败率告警（飞书 / 邮件）
-- CLI 脚手架、`shell` 调试、`retry` 回放
+- CLI 脚手架（`create -i --table` 读 MySQL 表反射 Item）、`shell` 调试、`retry` 回放
 
-`TaskSpider` / 账号池 / MySQL 管道见 [Roadmap](roadmap.md)。
+下一步见 [Roadmap](roadmap.md)。

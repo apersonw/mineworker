@@ -24,6 +24,10 @@
 
 ::: mineworker.pipelines.base.BasePipeline
 
+::: mineworker.pipelines.mysql.MysqlPipeline
+
+::: mineworker.db.mysqldb.MysqlDB
+
 ::: mineworker.User
 
 ::: mineworker.network.user_pool.base.UserPool

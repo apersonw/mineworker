@@ -41,9 +41,21 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `ITEM_DEFAULT_TABLE` | `"items"` | 裸 dict 落库的表名 |
 | `ITEM_FILTER_ENABLE` | `True` | Item 级去重开关 |
 | `CSV_OUTPUT_DIR` | `"."` | CsvPipeline 输出目录 |
-| `DEDUP_FILTER` | `"memory"` | `memory`（布隆）\| `lite`（精确） |
+| `DEDUP_FILTER` | `"memory"` | `memory`（布隆）\| `lite`（精确）\| `redis` \| `redis-set` |
 | `DEDUP_ERROR_RATE` | `1e-6` | 布隆误判率 |
 | `MONGO_URI` / `MONGO_DB` | `localhost` / `mineworker` | |
+
+## MySQL
+
+`pip install "mineworker[mysql]"`。用于 `MysqlPipeline` 与 `create -i --table`。
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `MYSQL_HOST` / `MYSQL_PORT` | `localhost` / `3306` | |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | `root` / `""` | |
+| `MYSQL_DB` | `"mineworker"` | 库名 |
+| `MYSQL_POOL_SIZE` | `5` | 连接池上限 |
+| `MYSQL_UPDATE_ON_DUPLICATE` | `True` | `save_items` 用 `INSERT ... ON DUPLICATE KEY UPDATE` |
 
 ## 代理 / 渲染 / 指标 / 告警
 
