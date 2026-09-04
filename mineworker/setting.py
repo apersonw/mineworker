@@ -44,6 +44,11 @@ SPIDER_KEEP_ALIVE: bool = False  # True = 爬完不退出，继续轮询队列�
 SPIDER_SEED_LOCK_TTL: int = 86400  # start_requests 一次性锁的 TTL（秒）
 HEARTBEAT_INTERVAL: float = 3.0  # 节点心跳写入间隔（秒）
 HEARTBEAT_STALE: float = 15.0  # 超过此秒数没心跳的节点视为已死
+
+# ---- TaskSpider ----
+TASK_POLL_INTERVAL: float = 2.0  # 轮询任务源的间隔（秒）
+TASK_BATCH_SIZE: int = 100  # 单次拉取多少个任务
+TASK_EXHAUST_POLLS: int = 3  # 连续这么多次拉不到任务，视为任务耗尽（keep_alive=False 时据此退出）
 COLLECTOR_TASK_COUNT: int = 100  # collector 单次从队列取多少任务
 REQUEST_BUFFER_MAX_CACHED: int = 1000  # RequestBuffer 达到此量立即 flush
 BUFFER_FLUSH_INTERVAL: float = 0.1  # RequestBuffer / ItemBuffer flush 轮询间隔

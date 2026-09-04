@@ -296,6 +296,33 @@ def test_exception_request_hook_called_on_retry(httpserver: HTTPServer) -> None:
     assert seen == [1, 2]  # 每次重试前调用一次
 
 
+def test_cb_kwargs_passed_to_callback(httpserver: HTTPServer) -> None:
+    httpserver.expect_request("/list").respond_with_data(
+        "<html><body>list</body></html>", content_type="text/html"
+    )
+    httpserver.expect_request("/detail").respond_with_data(
+        "<html><body>detail</body></html>", content_type="text/html"
+    )
+    collected: list[Any] = []
+
+    class S(AirSpider):
+        def __init__(self, url: str, **kw: Any) -> None:
+            self._url = url
+            super().__init__(item_handler=collected.extend, **kw)
+
+        def start_requests(self) -> Iterator[Request]:
+            yield Request(f"{self._url}/list", callback=self.parse_list)
+
+        def parse_list(self, request: Request, response: Any) -> Iterator[Any]:
+            yield Request(f"{self._url}/detail", callback=self.parse_row, cb_kwargs={"src": "L1"})
+
+        def parse_row(self, request: Request, response: Any, src: str = "") -> Iterator[Any]:
+            yield {"src": src}
+
+    S(httpserver.url_for("").rstrip("/")).start()
+    assert collected == [{"src": "L1"}]
+
+
 def test_debug_forces_single_thread(monkeypatch: pytest.MonkeyPatch) -> None:
     class S(CrawlSpider):
         pass

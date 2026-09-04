@@ -8,6 +8,10 @@
     options:
       members: [start, stop]
 
+::: mineworker.TaskSpider
+    options:
+      members: [task_requests, fetch_tasks, add_tasks, push_tasks, start, stop]
+
 ::: mineworker.BaseParser
 
 ::: mineworker.Request

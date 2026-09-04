@@ -110,7 +110,7 @@ class ParserWorker(threading.Thread):
         callback = self._resolve_callback(request)
         try:
             # 生成器回调的异常会在迭代时才抛出，因此调用与分发放在同一 try 内
-            self._dispatch(callback(request, response))
+            self._dispatch(callback(request, response, **request.cb_kwargs))
         except NotRetryError:
             self._drop(request)
             return

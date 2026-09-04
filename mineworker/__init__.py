@@ -7,6 +7,7 @@
     - `Request` / `Response`      网络层
     - `AirSpider` / `BaseParser`  轻量单机运行时（含浏览器渲染、中间件、代理池、指标、告警）
     - `Spider`                    Redis 分布式（多进程 / 多机 + 断点续爬，需 mineworker[redis]）
+    - `TaskSpider`                从任务源（Redis / DB）持续拉任务来爬
     - `Item` / `UpdateItem`       结构化数据 + 管道落库 + 去重
 """
 
@@ -17,6 +18,7 @@ from mineworker.__about__ import __version__
 from mineworker.core.base_parser import BaseParser
 from mineworker.core.spiders.air_spider import AirSpider
 from mineworker.core.spiders.spider import Spider
+from mineworker.core.spiders.task_spider import TaskSpider
 from mineworker.exceptions import (
     ConfigError,
     DedupError,
@@ -54,6 +56,7 @@ __all__ = [
     "ResponseError",
     "Spider",
     "SpiderError",
+    "TaskSpider",
     "UpdateItem",
     "ValidationError",
     "__version__",

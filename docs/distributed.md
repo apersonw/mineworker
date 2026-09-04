@@ -78,3 +78,59 @@ SPIDER_KEEP_ALIVE = False
 redis-cli DEL mineworker:NewsSpider:lock:seed mineworker:NewsSpider:z_requests
 redis-cli DEL mineworker:NewsSpider:dedup:bloom      # 顺便清去重
 ```
+
+---
+
+# TaskSpider
+
+有一堆待抓的 id / url，想用一个或多个常驻进程慢慢消费 —— 用 `TaskSpider`。
+它不走 `start_requests`，而是一个后台线程每 `TASK_POLL_INTERVAL` 秒从任务源
+（默认 Redis list）拉一批任务，对每个任务调 `task_requests(task)` 生成请求。
+
+```python
+import mineworker as mw
+
+
+class ProductSpider(mw.TaskSpider):
+    def task_requests(self, task):
+        yield mw.Request(
+            f"https://shop.com/p/{task['id']}",
+            callback=self.parse,
+            cb_kwargs={"task": task},
+        )
+
+    def parse(self, request, response, task):
+        yield {"id": task["id"], "price": response.css(".price::text").get()}
+```
+
+生产任务（任意进程 / 脚本）：
+
+```python
+ProductSpider.push_tasks({"id": 1}, {"id": 2}, {"id": 3})
+```
+
+消费（一台或多台机器）：
+
+```python
+ProductSpider().start()               # 任务耗尽后退出
+ProductSpider(keep_alive=True).start() # 常驻，队列空也不退出
+```
+
+多个节点 `lpop` 同一个 Redis list，任务天然分摊、不重复。运行中还能
+`self.add_tasks(...)`（比如在 parse 里发现了新的待抓项）。
+
+覆写 `fetch_tasks(self, limit)` 可换成从 MySQL / Mongo 查：
+
+```python
+class ProductSpider(mw.TaskSpider):
+    def fetch_tasks(self, limit):
+        rows = db.query("SELECT id FROM crawl_task WHERE status=0 LIMIT %s", limit)
+        db.execute("UPDATE crawl_task SET status=1 WHERE id IN ...")   # 标记为处理中
+        return [dict(r) for r in rows]
+```
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `TASK_POLL_INTERVAL` | `2.0` | 轮询任务源的间隔（秒） |
+| `TASK_BATCH_SIZE` | `100` | 单次拉多少个 |
+| `TASK_EXHAUST_POLLS` | `3` | 连续这么多次拉不到任务，视为耗尽（`keep_alive=False` 时据此退出） |
