@@ -16,8 +16,9 @@ from mineworker.network.user_agent import get_random_user_agent
 if TYPE_CHECKING:
     from mineworker.network.request import Request
 
-# httpx 0.28 用 follow_redirects 取代 requests 的 allow_redirects
-_CLIENT_ONLY_KEYS = frozenset({"verify", "proxy", "proxies"})
+# httpx 0.28 用 follow_redirects 取代 requests 的 allow_redirects；
+# cookies 放到 client 上（httpx 已弃用 per-request cookies）
+_CLIENT_ONLY_KEYS = frozenset({"verify", "proxy", "proxies", "cookies"})
 
 
 class HttpxDownloader(Downloader):
@@ -36,10 +37,17 @@ class HttpxDownloader(Downloader):
         self._client: httpx.Client | None = None
 
     # ------------------------------------------------------------------
-    def _make_client(self, proxy: str | None, verify: bool) -> httpx.Client:
+    def _make_client(
+        self,
+        proxy: str | None,
+        verify: bool,
+        cookies: dict[str, str] | None = None,
+    ) -> httpx.Client:
         kwargs: dict[str, Any] = {"follow_redirects": True, "verify": verify}
         if proxy:
             kwargs["proxy"] = proxy
+        if cookies:
+            kwargs["cookies"] = cookies
         return httpx.Client(**kwargs)
 
     def _pick_proxy(self, request: Request) -> str | None:
@@ -54,11 +62,12 @@ class HttpxDownloader(Downloader):
         """返回 (client, 用完是否关闭, 本次使用的代理)。"""
         proxy = self._pick_proxy(request)
         verify = request.requests_kwargs.get("verify", self._verify)
-        if self._use_session and proxy == self._proxy and verify == self._verify:
+        cookies = request.requests_kwargs.get("cookies")
+        if self._use_session and not cookies and proxy == self._proxy and verify == self._verify:
             if self._client is None:
                 self._client = self._make_client(self._proxy, self._verify)
             return self._client, False, proxy
-        return self._make_client(proxy, verify), True, proxy
+        return self._make_client(proxy, verify, cookies), True, proxy
 
     def _send_kwargs(self, request: Request) -> dict[str, Any]:
         kwargs = {k: v for k, v in request.requests_kwargs.items() if k not in _CLIENT_ONLY_KEYS}

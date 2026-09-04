@@ -34,6 +34,13 @@ from mineworker.exceptions import (
 from mineworker.network.item import Item, UpdateItem
 from mineworker.network.request import Request
 from mineworker.network.response import Response
+from mineworker.network.user_pool import (
+    GuestUserPool,
+    LocalUserPool,
+    RedisUserPool,
+    User,
+    UserPool,
+)
 from mineworker.utils.log import get_logger, log
 
 # 应用项目 setting.py 与环境变量覆盖，并按最终配置初始化日志
@@ -45,11 +52,14 @@ __all__ = [
     "BaseParser",
     "ConfigError",
     "DedupError",
+    "GuestUserPool",
     "Item",
     "ItemError",
+    "LocalUserPool",
     "MineWorkerError",
     "NotRetryError",
     "PipelineError",
+    "RedisUserPool",
     "Request",
     "RequestError",
     "Response",
@@ -58,6 +68,8 @@ __all__ = [
     "SpiderError",
     "TaskSpider",
     "UpdateItem",
+    "User",
+    "UserPool",
     "ValidationError",
     "__version__",
     "get_logger",

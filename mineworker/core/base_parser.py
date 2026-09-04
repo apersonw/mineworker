@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from mineworker.network.request import Request
     from mineworker.network.response import Response
+    from mineworker.network.user_pool.base import UserPool
 
 #: parse / callback 允许 yield 的类型：新的 Request、数据对象、或待执行的可调用
 ParseResult = Iterable[Any]
@@ -51,6 +52,17 @@ class BaseParser:
     ) -> ParseResult | None:
         """下载 / 解析抛异常且仍会重试时调用（观测用，通常不 yield）。"""
         return None
+
+    # ------------------------------------------------------------------
+    # 账号 / Cookie 池（可选）
+    # ------------------------------------------------------------------
+    def user_pool(self) -> UserPool | None:
+        """返回一个账号池，返回 None 表示不用。调度器会自动挂到下载链上。"""
+        return None
+
+    def check_login(self, response: Response) -> bool:
+        """用了账号池时判断响应是否处于登录态。返回 False -> 拉黑当前账号并换号重试。"""
+        return True
 
     # ------------------------------------------------------------------
     # 生命周期

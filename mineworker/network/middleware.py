@@ -42,6 +42,9 @@ class MiddlewareManager:
     def __bool__(self) -> bool:
         return bool(self._mws)
 
+    def prepend(self, middleware: Any) -> None:
+        self._mws.insert(0, middleware)
+
     def process_request(self, request: Request) -> Request | Response:
         for mw in self._mws:
             handler = getattr(mw, "process_request", None)

@@ -52,6 +52,14 @@ class BaseScheduler:
         self._item_buffer = ItemBuffer(self.stats, handler=item_handler, pipelines=pipelines)
         self._collector = Collector(self._task_queue)
         self._middleware = MiddlewareManager(setting.DOWNLOADER_MIDDLEWARES)
+        self._user_pool = parser.user_pool()
+        if self._user_pool is not None:
+            from mineworker.network.user_pool.middleware import UserPoolMiddleware
+
+            self._middleware.prepend(
+                UserPoolMiddleware(self._user_pool, check_login=parser.check_login)
+            )
+            log.info("账号池已挂载：{}", type(self._user_pool).__name__)
         self._alert = AlertManager(self.stats)
         self._metrics: MetricsReporter | None = None
         self._workers: list[ParserWorker] = []
@@ -190,6 +198,8 @@ class BaseScheduler:
         self._restore_signal()
         close_default_downloaders()
         close_proxy_pool()
+        if self._user_pool is not None:
+            self._user_pool.close()
         self._on_shutdown()
 
     # ------------------------------------------------------------------

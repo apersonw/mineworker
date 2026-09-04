@@ -24,6 +24,16 @@
 
 ::: mineworker.pipelines.base.BasePipeline
 
+::: mineworker.User
+
+::: mineworker.network.user_pool.base.UserPool
+
+::: mineworker.LocalUserPool
+
+::: mineworker.GuestUserPool
+
+::: mineworker.RedisUserPool
+
 ::: mineworker.network.middleware.DownloaderMiddleware
 
 ::: mineworker.network.proxy_pool.base.ProxyPool
