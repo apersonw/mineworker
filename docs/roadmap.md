@@ -1,5 +1,8 @@
 # Roadmap
 
+> 当前发行版本 **0.4.0** —— v1 + v2 的全部能力。变更明细见
+> [CHANGELOG](https://github.com/apersonw/mineworker/blob/main/CHANGELOG.md)。
+
 ## 已完成
 
 - **v1（0.3.0）** —— 轻量单机 AirSpider：运行时、网络、数据 / 去重、浏览器渲染、中间件 / 代理、指标 / 告警、CLI
@@ -10,12 +13,18 @@
 - **v2.5** —— [MySQL 管道](item-pipeline.md#mysql)：`MysqlPipeline`（`executemany` + `ON DUPLICATE KEY UPDATE` upsert）+ `mineworker create -i --table` 读 `SHOW FULL COLUMNS` 反射生成 Item
 - **v2.6** —— [async 内核评估](async-kernel.md)：结论**不做全量 async 重写**（投入产出比不成立、破坏 feapder 心智兼容）；落地隔离的 `AsyncHttpxDownloader`（`DOWNLOADER_ASYNC=True`，事件循环线程 + 共享 `AsyncClient`，API 零改动）+ `HTTPX_HTTP2` 开关
 - **v2.7** —— [`BatchSpider`](batch-spider.md)：MySQL 任务表状态机 + 批次记录表 + 周期批次调度 + 进度追踪 + 任务防丢；master（`start_monitor`）/ worker（`start`）分离，抽象 `BatchStore`（`MysqlBatchStore` / `MemoryBatchStore`）
+- **管理平台** —— **MineWorkerHub**（独立仓库 / 独立服务，对标 feaplat）：
+  项目托管（git / zip）· 任务调度（4 种）· Docker-per-task 实例 · SSE 实时日志 · 告警（飞书 / 邮件）·
+  **懂 MineWorker 的监控看板**（直读爬虫 Redis 的队列深度 / 节点心跳 / 批次进度，抓 Prometheus 端点）
+- **v2.8** —— 发布工程：首次发行到 PyPI（Trusted Publishing）、CHANGELOG、文档站自动部署
 
 ## 计划中
 
 | 能力 | 说明 |
 |---|---|
-| **管理平台** | 部署 / 调度 / 日志 / 报警 Web UI |
+| **反爬 / TLS 指纹** | `curl_cffi` 下载器（impersonate 真实浏览器的 JA3/TLS 指纹）、请求头一致性校验 |
+| **存储扩展** | PostgreSQL / Elasticsearch / Kafka 管道，抽一层批量写基类复用 `MysqlPipeline` 的套路 |
+| **async 批量分发** | 突破 worker「1 线程 1 在途」天花板。**前置条件**：先有 benchmark 拿到实测证据，见 [async 内核评估](async-kernel.md#何时重新评估) |
 
 ## 设计约束
 

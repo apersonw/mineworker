@@ -56,3 +56,28 @@ jobs:
           cache: pip
       - run: pip install -e ".[docs]"
       - run: mkdocs build --strict
+
+  # 打包坏了要在 PR 就红，而不是发布当天才发现
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip build twine
+      - name: build sdist + wheel
+        run: python -m build
+      - name: twine check
+        run: twine check --strict dist/*
+
+      - name: 干净环境装 wheel 冒烟
+        run: |
+          wheel=$(ls dist/*.whl)
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install "$wheel"
+          /tmp/smoke/bin/python -c "import mineworker; print(mineworker.__version__)"
+          # 只装核心包时 CLI 要给提示而不是 ModuleNotFoundError 堆栈
+          /tmp/smoke/bin/mineworker --version 2>&1 | grep -q 'mineworker\[cli\]'
+          /tmp/smoke/bin/pip install "${wheel}[cli]"
+          /tmp/smoke/bin/mineworker --version

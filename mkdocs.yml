@@ -1,6 +1,8 @@
 site_name: MineWorker
 site_description: 一个上手简单、结构清晰的 Python 爬虫框架
-repo_url: https://github.com/Lucas/mineworker
+site_url: https://apersonw.github.io/mineworker/
+repo_url: https://github.com/apersonw/mineworker
+repo_name: apersonw/mineworker
 docs_dir: docs
 
 theme:
@@ -39,7 +41,11 @@ markdown_extensions:
   - admonition
   - pymdownx.superfences
   - pymdownx.details
-  - toc: { permalink: true }
+  # 默认 slugify 会把中文标题整段丢掉（锚点退化成 _1 / _2，没法深链），
+  # 换成 pymdownx 的 unicode slugify 才能用「#何时重新评估」这种锚点
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify { kwds: { case: lower } }
 
 plugins:
   - search
