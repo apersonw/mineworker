@@ -1,9 +1,18 @@
 name: Release
 
-# 打 tag 即发布：v0.4.0 → 正式 PyPI，v0.4.0rc1 / v0.4.0b1 → TestPyPI（先演练）
+# 两条路：
+#   1. 打 tag v0.4.0  → 正式 PyPI + GitHub Release（tag 必须与 __about__.py 一致）
+#   2. 手动触发        → 默认发 TestPyPI，用来演练整条 OIDC 链路，不用改版本号
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 发到哪个索引
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
 
 permissions:
   contents: read
@@ -13,30 +22,40 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      prerelease: ${{ steps.meta.outputs.prerelease }}
+      target: ${{ steps.meta.outputs.target }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: 校验 tag 与 __about__.py 一致
+      - name: 确定版本与目标索引
         id: meta
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           pkg=$(python -c "import re,pathlib; print(re.search(r'\"(.+)\"', pathlib.Path('mineworker/__about__.py').read_text()).group(1))")
-          echo "tag=$tag  __about__=$pkg"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag ($tag) 与 __about__.py ($pkg) 不一致，拒绝发布"
-            exit 1
-          fi
-          echo "version=$tag" >> "$GITHUB_OUTPUT"
-          # rc / a / b 结尾视为预发布 → 只发 TestPyPI
-          if [[ "$tag" =~ (a|b|rc)[0-9]+$ ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # tag 触发：包版本以 __about__.py 为准，tag 必须对得上，否则发出去的
+            # 产物版本和 tag 名不一致，事后无从追溯
+            tag="${GITHUB_REF_NAME#v}"
+            echo "tag=$tag  __about__=$pkg"
+            if [ "$tag" != "$pkg" ]; then
+              echo "::error::tag ($tag) 与 __about__.py ($pkg) 不一致，拒绝发布"
+              exit 1
+            fi
+            # rc / a / b 结尾的预发布只进 TestPyPI
+            if [[ "$tag" =~ (a|b|rc)[0-9]+$ ]]; then
+              target=testpypi
+            else
+              target=pypi
+            fi
           else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            target="${{ inputs.target }}"
+            echo "手动触发：版本 $pkg → $target"
           fi
+
+          echo "version=$pkg" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
 
       - run: python -m pip install --upgrade pip build twine
       - run: python -m build
@@ -54,10 +73,10 @@ jobs:
           name: dist
           path: dist/
 
-  # 预发布（v*rc1 等）→ TestPyPI，用来验证整条 OIDC 链路
+  # 演练用：手动触发或 rc/a/b 预发布 → TestPyPI，验证整条 OIDC 链路
   testpypi:
     needs: build
-    if: needs.build.outputs.prerelease == 'true'
+    if: needs.build.outputs.target == 'testpypi'
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -72,7 +91,7 @@ jobs:
   # 正式版 → PyPI
   pypi:
     needs: build
-    if: needs.build.outputs.prerelease == 'false'
+    if: needs.build.outputs.target == 'pypi'
     runs-on: ubuntu-latest
     environment: pypi # 在仓库 Settings 里给这个 environment 加人工审批
     permissions:
@@ -82,9 +101,10 @@ jobs:
         with: { name: dist, path: dist }
       - uses: pypa/gh-action-pypi-publish@release/v1
 
+  # 只有 tag 触发的正式发布才建 GitHub Release（手动触发没有 tag 可挂）
   github-release:
     needs: [build, pypi]
-    if: needs.build.outputs.prerelease == 'false'
+    if: needs.build.outputs.target == 'pypi' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
