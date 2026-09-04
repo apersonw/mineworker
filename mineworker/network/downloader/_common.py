@@ -32,11 +32,28 @@ def report_bad_proxy(proxy: str) -> None:
         pool.report_bad(proxy)
 
 
-def send_kwargs(request: Request, default_timeout: float | None = None) -> dict[str, Any]:
-    """把 ``request.requests_kwargs`` 整理成可直接传给 ``client.request`` 的 kwargs。"""
+def resolve_impersonate(request: Request) -> str | None:
+    """本次请求要伪装成哪个浏览器：请求级 > 全局设置；空串 / None 表示不伪装。"""
+    value = getattr(request, "impersonate", None)
+    if value is None:
+        value = setting.DOWNLOADER_IMPERSONATE
+    return value or None
+
+
+def send_kwargs(
+    request: Request,
+    default_timeout: float | None = None,
+    *,
+    redirect_key: str = "follow_redirects",
+) -> dict[str, Any]:
+    """把 ``request.requests_kwargs`` 整理成可直接传给 ``client.request`` 的 kwargs。
+
+    ``redirect_key`` 是「跟随重定向」在目标客户端里的参数名：httpx 叫
+    ``follow_redirects``，curl_cffi 沿用 requests 的 ``allow_redirects``。
+    """
     kwargs = {k: v for k, v in request.requests_kwargs.items() if k not in CLIENT_ONLY_KEYS}
-    if "allow_redirects" in kwargs:
-        kwargs["follow_redirects"] = kwargs.pop("allow_redirects")
+    if "allow_redirects" in kwargs and redirect_key != "allow_redirects":
+        kwargs[redirect_key] = kwargs.pop("allow_redirects")
     if "timeout" not in kwargs:
         kwargs["timeout"] = (
             default_timeout if default_timeout is not None else setting.REQUEST_TIMEOUT
@@ -45,6 +62,11 @@ def send_kwargs(request: Request, default_timeout: float | None = None) -> dict[
     want_ua = request.random_user_agent
     if want_ua is None:
         want_ua = setting.RANDOM_USER_AGENT
+    # 伪装浏览器时绝不塞随机 UA：impersonate 会带一整套自洽的浏览器头，
+    # 再盖一个来自 UA 池的 UA 就成了「TLS 握手说 Chrome、UA 头说 Firefox」——
+    # 这种自相矛盾比不伪装更容易被识别。
+    if resolve_impersonate(request):
+        want_ua = False
     headers = dict(kwargs.get("headers") or {})
     if want_ua and not any(k.lower() == "user-agent" for k in headers):
         headers["User-Agent"] = get_random_user_agent()

@@ -9,6 +9,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from mineworker import setting
+from mineworker.network.downloader._common import resolve_impersonate
 from mineworker.network.downloader._httpx import HttpxDownloader
 from mineworker.network.downloader.base import Downloader
 
@@ -30,7 +31,10 @@ _lock = threading.Lock()
 
 def get_default_downloader(request: Request) -> Downloader:
     if request.render:
+        # 渲染必须走浏览器，浏览器自带真实指纹，无需 impersonate
         key = "playwright"
+    elif resolve_impersonate(request):
+        key = "curl-session" if request.use_session else "curl"
     elif setting.DOWNLOADER_ASYNC:
         key = "async"
     elif request.use_session:
@@ -52,6 +56,10 @@ def _build(key: str, request: Request) -> Downloader:
         from mineworker.network.downloader._playwright import PlaywrightDownloader
 
         return PlaywrightDownloader()
+    if key.startswith("curl"):
+        from mineworker.network.downloader._curl import CurlDownloader
+
+        return CurlDownloader(use_session=bool(request.use_session))
     if key == "async":
         from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader
 

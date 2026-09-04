@@ -52,6 +52,7 @@ class Request:
         auto_request: bool = True,
         use_session: bool | None = None,
         random_user_agent: bool | None = None,
+        impersonate: str | None = None,
         render: bool = False,
         render_time: float | None = None,
         wait_for: str | None = None,
@@ -70,6 +71,9 @@ class Request:
         self.auto_request = auto_request
         self.use_session = use_session
         self.random_user_agent = random_user_agent
+        #: 伪装成哪个浏览器的 TLS / HTTP2 指纹（如 "chrome"、"safari17_0"）；
+        #: None 表示沿用 setting.DOWNLOADER_IMPERSONATE
+        self.impersonate = impersonate
         self.render = render
         self.render_time = render_time
         self.wait_for = wait_for
@@ -132,6 +136,7 @@ class Request:
         "auto_request",
         "use_session",
         "random_user_agent",
+        "impersonate",
         "render",
         "render_time",
         "wait_for",

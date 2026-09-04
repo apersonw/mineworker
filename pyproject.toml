@@ -45,7 +45,8 @@ mysql = ["pymysql>=1.1", "dbutils>=3.0"]
 redis = ["redis>=5.0"]
 cli = ["typer>=0.12", "jinja2>=3.1"]
 metrics = ["prometheus-client>=0.20"]
-all = ["mineworker[render,mongo,mysql,redis,cli,metrics]"]
+curl = ["curl_cffi>=0.16"]  # TLS / HTTP2 指纹伪装
+all = ["mineworker[render,mongo,mysql,redis,cli,metrics,curl]"]
 dev = [
     "mineworker[all]",
     "pytest>=8",
@@ -108,14 +109,26 @@ files = ["mineworker"]
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["parsel.*", "bitarray.*", "w3lib.*", "bs4.*", "IPython.*", "pymysql.*", "dbutils.*"]
+module = [
+    "parsel.*",
+    "bitarray.*",
+    "w3lib.*",
+    "bs4.*",
+    "IPython.*",
+    "pymysql.*",
+    "dbutils.*",
+    "curl_cffi.*",
+]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q --strict-markers"
-markers = ["render: 需要 Playwright + chromium（playwright install chromium）"]
+markers = [
+    "render: 需要 Playwright + chromium（playwright install chromium）",
+    "network: 需要访问外部网络（指纹验证等），CI 里用 -m 'not network' 排除",
+]
 
 [tool.coverage.run]
 source = ["mineworker"]

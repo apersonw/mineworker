@@ -62,6 +62,28 @@ class Response:
             history=[str(r.url) for r in resp.history],
         )
 
+    @classmethod
+    def from_curl_cffi(cls, resp: Any, request: Request | None = None) -> Response:
+        """由 :mod:`curl_cffi` 的响应构造（与 :meth:`from_httpx` 平行）。
+
+        与 httpx 的差异：``elapsed`` 已经是秒（float）而非 timedelta，
+        编码属性叫 ``charset_encoding``，``history`` 里是完整响应对象。
+        """
+        elapsed = resp.elapsed
+        if hasattr(elapsed, "total_seconds"):
+            elapsed = elapsed.total_seconds()
+        return cls(
+            url=str(resp.url),
+            status_code=resp.status_code,
+            content=resp.content or b"",
+            headers=dict(resp.headers),
+            cookies=dict(resp.cookies),
+            request=request,
+            encoding=getattr(resp, "charset_encoding", None),
+            elapsed=float(elapsed) if elapsed is not None else None,
+            history=[str(r.url) for r in (resp.history or [])],
+        )
+
     # ------------------------------------------------------------------
     def _decode(self) -> None:
         if self._forced_encoding:

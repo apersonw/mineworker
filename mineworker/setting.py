@@ -78,6 +78,12 @@ DOWNLOADER_ASYNC: bool = False
 DOWNLOADER_ASYNC_CONCURRENCY: int = 200  # async 下载器的最大在途请求数（信号量 + 连接池上限）
 HTTPX_HTTP2: bool = False  # httpx 开 HTTP/2（需 httpx[http2]），同步 / 异步下载器都生效
 
+# ---- 反爬：TLS / HTTP2 指纹伪装（需 pip install "mineworker[curl]"）----
+# 填浏览器名即启用，普通请求改走 CurlDownloader（libcurl-impersonate）。
+# 例："chrome"（跟随 curl_cffi 的最新 Chrome）、"chrome131"、"safari17_0"、"firefox135"。
+# 空串 = 关闭。可用 Request(impersonate=...) 按请求覆盖。详见 docs/anti-bot.md
+DOWNLOADER_IMPERSONATE: str = ""
+
 # ---- 下载中间件（点号路径，实现 process_request / process_response）----
 DOWNLOADER_MIDDLEWARES: list[str] = []
 
