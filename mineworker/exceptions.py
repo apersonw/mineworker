@@ -19,6 +19,13 @@ class RequestError(MineWorkerError):
     """请求下载失败（网络异常、超时、状态码不符合预期等）。"""
 
 
+class AntiBotError(RequestError):
+    """响应疑似反爬拦截页（Cloudflare / Akamai 挑战页等）。
+
+    继承 `RequestError`，因此会走既有的下载失败重试路径：重试时代理池会换一个出口。
+    """
+
+
 class ResponseError(MineWorkerError):
     """响应内容异常（解析失败、非预期结构等）。"""
 

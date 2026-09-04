@@ -44,7 +44,8 @@ jobs:
       - name: install chromium
         run: python -m playwright install --with-deps chromium
       - name: pytest
-        run: pytest -ra --cov --cov-report=term-missing
+        # network 标记的用例要打外部指纹服务，放 CI 里会 flaky，本地手动跑
+        run: pytest -ra -m "not network" --cov --cov-report=term-missing
 
   docs:
     runs-on: ubuntu-latest

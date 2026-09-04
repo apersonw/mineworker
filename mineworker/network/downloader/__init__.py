@@ -68,7 +68,13 @@ def _build(key: str, request: Request) -> Downloader:
 
 
 def download_request(request: Request, downloader: Downloader | None = None) -> Response:
-    return (downloader or get_default_downloader(request)).download(request)
+    response = (downloader or get_default_downloader(request)).download(request)
+    if setting.ANTIBOT_DETECT:
+        # 放在这里而不是各下载器里：httpx / curl / async / playwright 一次覆盖
+        from mineworker.network import antibot
+
+        antibot.raise_if_blocked(response)
+    return response
 
 
 def close_default_downloaders() -> None:

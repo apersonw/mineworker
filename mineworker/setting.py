@@ -84,6 +84,11 @@ HTTPX_HTTP2: bool = False  # httpx 开 HTTP/2（需 httpx[http2]），同步 / �
 # 空串 = 关闭。可用 Request(impersonate=...) 按请求覆盖。详见 docs/anti-bot.md
 DOWNLOADER_IMPERSONATE: str = ""
 
+# 识别 Cloudflare / Akamai 挑战页等反爬拦截，命中则抛 AntiBotError（继承 RequestError，
+# 走正常重试 + 换代理）。默认开：挑战页常返回 200 + 一段 JS，不识别就会被当成正常数据
+# 静默入库。规则很保守（只认专有响应头 / 专有脚本标记），误伤了就设 False 关掉。
+ANTIBOT_DETECT: bool = True
+
 # ---- 下载中间件（点号路径，实现 process_request / process_response）----
 DOWNLOADER_MIDDLEWARES: list[str] = []
 

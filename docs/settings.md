@@ -35,6 +35,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器最大在途请求数 |
 | `HTTPX_HTTP2` | `False` | httpx 开 HTTP/2（需 `pip install "httpx[http2]"`） |
 | `DOWNLOADER_IMPERSONATE` | `""` | 伪装浏览器 TLS / HTTP2 指纹，填 `"chrome"` 等即启用（需 `pip install "mineworker[curl]"`），见[反爬对抗](anti-bot.md) |
+| `ANTIBOT_DETECT` | `True` | 识别 Cloudflare / Akamai 挑战页，命中抛 `AntiBotError`（走既有重试 + 换代理） |
 
 ## Item / 管道 / 去重
 

@@ -17,12 +17,14 @@
   项目托管（git / zip）· 任务调度（4 种）· Docker-per-task 实例 · SSE 实时日志 · 告警（飞书 / 邮件）·
   **懂 MineWorker 的监控看板**（直读爬虫 Redis 的队列深度 / 节点心跳 / 批次进度，抓 Prometheus 端点）
 - **v2.8** —— 发布工程：首次发行到 PyPI（Trusted Publishing）、CHANGELOG、文档站自动部署
+- **v2.9** —— [反爬对抗](anti-bot.md)：`CurlDownloader`（curl_cffi 伪装真实浏览器的
+  TLS / HTTP2 指纹，`DOWNLOADER_IMPERSONATE`）+ 自动抑制矛盾的随机 UA +
+  Cloudflare / Akamai 挑战页识别（`AntiBotError`，走既有重试与换代理）
 
 ## 计划中
 
 | 能力 | 说明 |
 |---|---|
-| **反爬 / TLS 指纹** | `curl_cffi` 下载器（impersonate 真实浏览器的 JA3/TLS 指纹）、请求头一致性校验 |
 | **存储扩展** | PostgreSQL / Elasticsearch / Kafka 管道，抽一层批量写基类复用 `MysqlPipeline` 的套路 |
 | **async 批量分发** | 突破 worker「1 线程 1 在途」天花板。**前置条件**：先有 benchmark 拿到实测证据，见 [async 内核评估](async-kernel.md#何时重新评估) |
 
