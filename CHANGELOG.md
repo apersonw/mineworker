@@ -5,6 +5,37 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-04
+
+反爬对抗：从 TLS 握手层解决问题，而不是继续换 User-Agent。
+
+### 新增
+
+- **TLS / HTTP2 指纹伪装** —— 新下载器 `CurlDownloader`（基于
+  [curl_cffi](https://github.com/lexiforest/curl_cffi) / libcurl-impersonate）。
+  设 `DOWNLOADER_IMPERSONATE = "chrome"` 即启用，**爬虫代码零改动**；
+  也可按请求覆盖：`Request(url, impersonate="safari17_0")`。
+  需 `pip install "mineworker[curl]"`（已并入 `all`）
+- **反爬拦截识别** —— 自动识别 Cloudflare / Akamai 挑战页与 JS 跳转空壳，
+  抛 `AntiBotError`。它继承 `RequestError`，因此直接复用既有的重试路径，
+  重试时代理池会换一个出口 IP。开关 `ANTIBOT_DETECT`（默认开）
+- 新文档：[反爬对抗](https://apersonw.github.io/mineworker/anti-bot/)
+
+### 变更
+
+- **启用 `impersonate` 时不再注入随机 User-Agent**。`impersonate` 自带一整套自洽的
+  浏览器头，再叠加 UA 池会造成「TLS 握手说 Chrome、UA 头说 Firefox」的自相矛盾 ——
+  这比不伪装更容易被识破。显式传入的 `headers` 仍然优先
+- 下载器选择顺序：`render` > `impersonate` > `DOWNLOADER_ASYNC` > `use_session` > 默认
+- `Request.impersonate` 参与序列化，分布式模式下经 Redis 传递不会丢失
+
+### 说明
+
+为什么换 UA 不够：现代反爬看的是 TLS 握手指纹（JA3/JA4）和 HTTP/2 SETTINGS 帧 ——
+在你发出第一个字节之前就已经暴露。实测同一端点，httpx 是
+`JA4 t13d1712h1_…` + HTTP/1.1 而 UA 却自称 Firefox 126（三重矛盾），
+伪装后为 `JA4 t13d1516h2_…` + h2 + Chrome UA，三者自洽。
+
 ## [0.4.0] - 2026-09-04
 
 **首次发行到 PyPI。** 0.3.0 之后积累的全部分布式能力（v2.1–v2.7）随本版本一次性发出。
@@ -69,5 +100,6 @@
 - **命令行** —— `mineworker create` 脚手架、`shell` 交互调试、`retry` 失败重放
 - mkdocs-material 文档站
 
-[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/apersonw/mineworker/releases/tag/v0.5.0
 [0.4.0]: https://github.com/apersonw/mineworker/releases/tag/v0.4.0
