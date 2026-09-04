@@ -15,8 +15,8 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -49,7 +49,7 @@ jobs:
           /tmp/smoke/bin/python -c "import mineworker; print(mineworker.__version__)"
           /tmp/smoke/bin/mineworker --version
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: dist
           path: dist/
@@ -63,7 +63,7 @@ jobs:
     permissions:
       id-token: write # Trusted Publishing 用，不需要任何 token
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with: { name: dist, path: dist }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -78,7 +78,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with: { name: dist, path: dist }
       - uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -89,8 +89,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
         with: { name: dist, path: dist }
 
       - name: 从 CHANGELOG 抽取本版本段落
