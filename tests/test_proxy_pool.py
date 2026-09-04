@@ -82,7 +82,7 @@ class _SpyPool(ProxyPool):
 @respx.mock
 def test_downloader_uses_pool_and_reports_bad(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _SpyPool()
-    monkeypatch.setattr("mineworker.network.downloader._httpx.get_proxy_pool", lambda: spy)
+    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: spy)
     respx.get("https://x.test/").mock(side_effect=httpx.ConnectError("boom"))
     with pytest.raises(RequestError):
         HttpxDownloader().download(Request("https://x.test/"))
@@ -93,7 +93,7 @@ def test_downloader_uses_pool_and_reports_bad(monkeypatch: pytest.MonkeyPatch) -
 @respx.mock
 def test_explicit_request_proxy_skips_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _SpyPool()
-    monkeypatch.setattr("mineworker.network.downloader._httpx.get_proxy_pool", lambda: spy)
+    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: spy)
     monkeypatch.setattr(setting, "RANDOM_USER_AGENT", False)
     respx.get("https://x.test/").mock(return_value=httpx.Response(200, text="ok"))
     resp = HttpxDownloader().download(Request("https://x.test/", proxy="http://explicit:9"))

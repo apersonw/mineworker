@@ -31,6 +31,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RANDOM_USER_AGENT` | `True` | 自动注入随机 UA |
 | `USE_SESSION` | `False` | 复用 httpx 连接 |
 | `DOWNLOADER_MIDDLEWARES` | `[]` | 下载中间件点号路径 |
+| `DOWNLOADER_ASYNC` | `False` | 普通请求走 [`AsyncHttpxDownloader`](async-kernel.md)（共享连接池 / HTTP/2） |
+| `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器最大在途请求数 |
+| `HTTPX_HTTP2` | `False` | httpx 开 HTTP/2（需 `pip install "httpx[http2]"`） |
 
 ## Item / 管道 / 去重
 

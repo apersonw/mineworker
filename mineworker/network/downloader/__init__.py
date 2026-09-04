@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING
 
+from mineworker import setting
 from mineworker.network.downloader._httpx import HttpxDownloader
 from mineworker.network.downloader.base import Downloader
 
@@ -30,6 +31,8 @@ _lock = threading.Lock()
 def get_default_downloader(request: Request) -> Downloader:
     if request.render:
         key = "playwright"
+    elif setting.DOWNLOADER_ASYNC:
+        key = "async"
     elif request.use_session:
         key = "httpx-session"
     else:
@@ -49,6 +52,10 @@ def _build(key: str, request: Request) -> Downloader:
         from mineworker.network.downloader._playwright import PlaywrightDownloader
 
         return PlaywrightDownloader()
+    if key == "async":
+        from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader
+
+        return AsyncHttpxDownloader()
     return HttpxDownloader(use_session=bool(request.use_session))
 
 

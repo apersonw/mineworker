@@ -61,6 +61,13 @@ REQUEST_TIMEOUT: float = 22.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
+# ---- 下载器 ----
+# True = 普通请求走 AsyncHttpxDownloader：一个事件循环线程 + 共享 AsyncClient 承载所有在途连接
+# （连接池 / keep-alive / HTTP/2 被所有 worker 共享）。API 与线程模型不变。详见 docs/async-kernel.md
+DOWNLOADER_ASYNC: bool = False
+DOWNLOADER_ASYNC_CONCURRENCY: int = 200  # async 下载器的最大在途请求数（信号量 + 连接池上限）
+HTTPX_HTTP2: bool = False  # httpx 开 HTTP/2（需 httpx[http2]），同步 / 异步下载器都生效
+
 # ---- 下载中间件（点号路径，实现 process_request / process_response）----
 DOWNLOADER_MIDDLEWARES: list[str] = []
 

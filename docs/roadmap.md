@@ -8,12 +8,12 @@
 - **v2.3** —— [`TaskSpider`](distributed.md#taskspider)：从 Redis / DB 任务源持续拉任务，多节点分摊，`keep_alive` 常驻
 - **v2.4** —— [账号 / Cookie 池](user-pool.md)：`LocalUserPool` / `GuestUserPool` / `RedisUserPool`；`user_pool()` + `check_login()` 钩子，掉登录自动换号重试
 - **v2.5** —— [MySQL 管道](item-pipeline.md#mysql)：`MysqlPipeline`（`executemany` + `ON DUPLICATE KEY UPDATE` upsert）+ `mineworker create -i --table` 读 `SHOW FULL COLUMNS` 反射生成 Item
+- **v2.6** —— [async 内核评估](async-kernel.md)：结论**不做全量 async 重写**（投入产出比不成立、破坏 feapder 心智兼容）；落地隔离的 `AsyncHttpxDownloader`（`DOWNLOADER_ASYNC=True`，事件循环线程 + 共享 `AsyncClient`，API 零改动）+ `HTTPX_HTTP2` 开关
 
 ## 计划中
 
 | 能力 | 说明 |
 |---|---|
-| **async 内核** | 评估用 async httpx 替换线程模型 |
 | **`BatchSpider`** | 批次记录表、进度追踪、定时批次、任务防丢 |
 | **管理平台** | 部署 / 调度 / 日志 / 报警 Web UI |
 
