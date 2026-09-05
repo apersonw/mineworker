@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -16,3 +18,38 @@ def _reset_state() -> Iterator[None]:
     yield
     setting.reload()
     log.configure()
+
+
+# ----------------------------------------------------------------------
+# 真实数据库集成测试用的夹具。没配环境变量就 skip —— 本地默认不拖慢，CI 里必跑。
+#
+#   MINEWORKER_TEST_POSTGRES_URL=postgresql://postgres:x@127.0.0.1:5432/postgres
+#   MINEWORKER_TEST_MYSQL_URL=mysql://root:x@127.0.0.1:3306/mineworker
+# ----------------------------------------------------------------------
+def _db_url(env: str) -> str:
+    url = os.environ.get(env, "").strip()
+    if not url:
+        pytest.skip(f"未设置 {env}，跳过真库集成测试")
+    return url
+
+
+@pytest.fixture
+def postgres_db() -> Iterator[Any]:
+    from mineworker.db.postgresdb import PostgresDB
+
+    db = PostgresDB.from_url(_db_url("MINEWORKER_TEST_POSTGRES_URL"))
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def mysql_db() -> Iterator[Any]:
+    from mineworker.db.mysqldb import MysqlDB
+
+    db = MysqlDB.from_url(_db_url("MINEWORKER_TEST_MYSQL_URL"))
+    try:
+        yield db
+    finally:
+        db.close()

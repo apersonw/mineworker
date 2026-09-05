@@ -128,6 +128,17 @@ MYSQL_DB: str = "mineworker"
 MYSQL_POOL_SIZE: int = 5
 MYSQL_UPDATE_ON_DUPLICATE: bool = True  # save_items 用 INSERT ... ON DUPLICATE KEY UPDATE
 
+# ---- PostgreSQL（需 pip install "mineworker[postgres]"）----
+POSTGRES_HOST: str = "localhost"
+POSTGRES_PORT: int = 5432
+POSTGRES_USER: str = "postgres"
+POSTGRES_PASSWORD: str = ""
+POSTGRES_DB: str = "mineworker"
+POSTGRES_POOL_SIZE: int = 5
+# 冲突处理：error 冲突即报错 / nothing 跳过（默认）/ update 更新（需 POSTGRES_CONFLICT_TARGET）
+POSTGRES_ON_CONFLICT: str = "nothing"
+POSTGRES_CONFLICT_TARGET: list[str] = []  # update 模式下的冲突列，通常是唯一索引的列
+
 # ---- Redis（分布式 Spider / 持久化去重）----
 REDIS_URL: str = "redis://localhost:6379/0"
 REDIS_KEY_PREFIX: str = "mineworker"  # 所有 Redis key 的命名空间前缀

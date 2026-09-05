@@ -33,6 +33,28 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    # 真库集成测试用；没有它们 tests/test_sql_integration.py 会整体 skip
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: mineworker
+          POSTGRES_DB: mineworker
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: mineworker
+          MYSQL_DATABASE: mineworker
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pmineworker --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -45,6 +67,9 @@ jobs:
         run: python -m playwright install --with-deps chromium
       - name: pytest
         # network 标记的用例要打外部指纹服务，放 CI 里会 flaky，本地手动跑
+        env:
+          MINEWORKER_TEST_POSTGRES_URL: postgresql://postgres:mineworker@127.0.0.1:5432/mineworker
+          MINEWORKER_TEST_MYSQL_URL: mysql://root:mineworker@127.0.0.1:3306/mineworker
         run: pytest -ra -m "not network" --cov --cov-report=term-missing
 
   docs:

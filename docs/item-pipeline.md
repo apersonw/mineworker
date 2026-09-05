@@ -69,6 +69,38 @@ mineworker create -i news --table news --mysql mysql://root:pwd@10.0.0.2:3306/sp
 `__unique_key__`，并把每个字段 + 注释列成提示（注解形式，不进 `__dict__`）。
 不加 `--mysql` 时用 `setting` 里的 MySQL 配置。
 
+## PostgreSQL
+
+`pip install "mineworker[postgres]"`，连接信息走 `POSTGRES_HOST` / `POSTGRES_PORT` /
+`POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`，底层是 psycopg 3 + `psycopg_pool`。
+
+```python
+ITEM_PIPELINES = ["mineworker.pipelines.postgres.PostgresPipeline"]
+```
+
+写入骨架和 MySQL 完全一样（同一个 `SqlPipeline` 基类），**差别只在冲突处理**：
+MySQL 的 `ON DUPLICATE KEY UPDATE` 不用指明冲突键，Postgres 的 `ON CONFLICT` 必须给
+冲突目标。所以拆成两个配置：
+
+| `POSTGRES_ON_CONFLICT` | 行为 |
+|---|---|
+| `"nothing"`（默认） | `ON CONFLICT DO NOTHING`，主键 / 唯一键重复就跳过。对爬虫最安全 |
+| `"update"` | `ON CONFLICT (...) DO UPDATE SET ...`，即 upsert。**需要** `POSTGRES_CONFLICT_TARGET` |
+| `"error"` | 裸 `INSERT`，冲突则整批失败并 dump 到 `failed_items.jsonl` |
+
+```python
+POSTGRES_ON_CONFLICT = "update"
+POSTGRES_CONFLICT_TARGET = ["url"]   # 通常是唯一索引的列
+```
+
+`update` 模式漏填 `POSTGRES_CONFLICT_TARGET` 会降级成 `DO NOTHING` 并告警一次 ——
+宁可少写几条，也好过整批抛异常。冲突目标列本身不会出现在 `SET` 里（Postgres 会报错）。
+
+!!! note "许可证"
+    psycopg 是 **LGPL-3.0**，而 MineWorker 是 MIT。它是**可选** extra、由你自行安装、
+    未被打包进本项目，因此不影响 MineWorker 的授权；但如果贵司对 LGPL 依赖有合规要求，
+    这里提前知会一声。
+
 ## 去重
 
 - **请求级**：`Request.filter_repeat=True` 时按 `fingerprint`（method + 规范化 URL + body）去重
