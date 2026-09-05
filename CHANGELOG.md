@@ -5,22 +5,47 @@
 
 ## [Unreleased]
 
-### 新增
+## [0.6.0] - 2026-09-05
 
-- PostgreSQL / Elasticsearch / Kafka 管道；抽出 `SqlPipeline` 基类
-- `benchmarks/` 吞吐画像套件
+存储扩展 + 一次由实测驱动的性能修复。**升级即得约 3.2× 吞吐，无需改任何配置。**
 
 ### 性能
 
-- **默认配置下吞吐提升约 3.2×**（32 线程 97 → 308 QPS）：缓存 `SSLContext`。
-  `httpx.Client()` 每次构造要新建 SSL context（实测 32.9ms），而下载器默认每请求
-  新建一个 Client —— 这是框架最大的单项开销。缓存后降到 0.4ms。
-  **抓取语义零变化**（cookie 仍每请求隔离）
+- **默认配置下吞吐提升约 3.2×**（50ms 延迟、32 线程：97 → 308 QPS）——
+  缓存 `SSLContext`。`httpx.Client()` 每次构造都会新建 SSL context（加载 CA 包，
+  实测 **32.9ms/个**），而下载器默认每个请求新建一个 Client，于是这 33ms 成了
+  每请求的固定开销 —— 框架最大的单项成本。缓存后降到 **0.4ms**。
+
+    **抓取语义零变化**：`SSLContext` 是无状态配置对象，cookie 仍然每请求隔离。
+    这与「共享 `Client`」不同 —— 后者会连 cookie jar 一起共享。
+
+- 顺带解决了「线程越多越慢」：那 33ms 的 CA 解析占着 GIL，本身就是争用源。
+  修复前吞吐在 ~100 QPS 封顶，现在随线程数单调增长（4→128 线程：67 → 555 QPS）
+
+### 新增
+
+- **PostgreSQL 管道** —— `PostgresPipeline`（psycopg 3）。`ON CONFLICT` 三种模式：
+  `nothing`（默认，冲突跳过）/ `update`（upsert，需 `POSTGRES_CONFLICT_TARGET`）/
+  `error`。需 `pip install "mineworker[postgres]"`
+- **Elasticsearch 管道** —— `helpers.bulk` 批量写，`__update_key__` 拼 `_id` 做 upsert
+- **Kafka 管道** —— `table_name` 当 topic。它是投递而非存储，不支持 `UpdateItem`
+- 抽出 `SqlPipeline` 基类，MySQL / PostgreSQL 共用同一套写入骨架
+- **真实数据库集成测试** —— Postgres 与 MySQL 跑同一组用例，CI 用 service containers
+  （`MysqlPipeline` 此前从没跑过真库）
+- [`benchmarks/`](https://github.com/apersonw/mineworker/tree/main/benchmarks) 吞吐画像套件
 
 ### 修复
 
-- `setting.USE_SESSION` 是死配置：定义了、文档写了，但框架代码从没读过它，
-  只有 `Request(use_session=)` 生效。现在两者都生效（请求级优先）
+- **`setting.USE_SESSION` 是死配置** —— 它在 `setting.py` 有定义、文档里也写着
+  「复用 httpx 连接」，但框架代码**从没读过它**，只有 `Request(use_session=)` 生效。
+  现在两者都生效（请求级优先）。默认仍为 `False`：开启会让 cookie 跨请求共享
+
+### 说明
+
+0.4.0 曾记载「工作线程是 1 线程 1 在途」并建议「调大 `SPIDER_THREAD_COUNT` 到 ~100」。
+实测表明**两者都不准确**：时间加权平均在途只有线程数的 15%–58%，而线程数超过某点后
+效率显著下降。同时 **async 批量分发已被实测否决**（瓶颈不在线程模型）。
+完整数据见 [async 内核评估](https://apersonw.github.io/mineworker/async-kernel/#实测2026-09)。
 
 ## [0.5.0] - 2026-09-04
 
@@ -117,6 +142,7 @@
 - **命令行** —— `mineworker create` 脚手架、`shell` 交互调试、`retry` 失败重放
 - mkdocs-material 文档站
 
-[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/apersonw/mineworker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/apersonw/mineworker/releases/tag/v0.5.0
 [0.4.0]: https://github.com/apersonw/mineworker/releases/tag/v0.4.0

@@ -9,7 +9,7 @@
 一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> **0.5.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
+> **0.6.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
 > 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/mineworker/anti-bot/)。
 > 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/mineworker/roadmap/)。
 
@@ -17,10 +17,11 @@
 
 ```bash
 pip install mineworker            # 核心
-pip install "mineworker[all]"     # 含渲染 / MongoDB / MySQL / Redis / CLI / 指标
+pip install "mineworker[all]"     # 含渲染 / 各类存储 / Redis / CLI / 指标 / 指纹伪装
 ```
 
-也可以按需装单项：`render` · `mongo` · `mysql` · `redis` · `cli` · `metrics`。
+也可以按需装单项：`render` · `mongo` · `mysql` · `postgres` · `elasticsearch` · `kafka` ·
+`redis` · `cli` · `metrics` · `curl`。
 
 ## 快速开始
 
@@ -63,7 +64,7 @@ NewsSpider().start()
 | 网络 | `Request`/`Response`（httpx + parsel）、自动重试、`validate`/`failed_request` 钩子、随机 UA、会话复用 |
 | 分布式 | `Spider`：Redis 队列 + 布隆去重 + 断点续爬 + 种子一次性锁 + 多节点心跳结束检测 |
 | 任务驱动 | `TaskSpider` 从任务源持续消费；`BatchSpider` 周期批次采集（任务表状态机 + 进度追踪 + 防丢） |
-| 数据 | `Item`/`UpdateItem`、`Pipeline`（Console/CSV/MongoDB/MySQL upsert）、请求级 + Item 级去重（布隆/精确） |
+| 数据 | `Item`/`UpdateItem`、`Pipeline`（Console/CSV/MongoDB/MySQL/PostgreSQL/Elasticsearch/Kafka）、请求级 + Item 级去重（布隆/精确） |
 | 渲染 | `Request(render=True)` —— Playwright 渲染池、`wait_for`/`render_time`/`render_script` |
 | 反爬 | TLS / HTTP2 指纹伪装（`impersonate` 真实浏览器）、Cloudflare / Akamai 挑战页识别 |
 | 扩展 | 下载中间件链、代理池接口、账号 / Cookie 池（掉登录自动换号） |
