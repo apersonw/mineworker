@@ -5,6 +5,45 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-05
+
+礼貌性与失败处理。**含一处破坏性变更**，升级前请读下面第一节。
+
+### ⚠️ 破坏性变更：非 2xx 响应不再进 `parse()`
+
+0.6.0 及以前框架**完全不检查状态码**：`validate()` 默认返回 `True`，于是
+429 / 503 / 404 的响应体直接进 `parse()` 被当成数据 —— 被限速时不但不退避，
+还会把限速提示页入库，然后继续重试。
+
+0.7.0 起：
+
+| 状态码 | 处理 |
+|---|---|
+| 2xx / **3xx** | 正常进 `parse()`（3xx 能到回调说明你显式关了 `allow_redirects`） |
+| 429 / 500 / 502 / 503 / 504 | 重试（可配 `RETRY_STATUS_CODES`） |
+| 其余非 2xx | 判失败，走 `failed_request()` 钩子 |
+
+**迁移**：
+- 想让 `parse()` 继续收到 404 之类 → `ACCEPT_STATUS_CODES = [404]`
+- 想完全回到旧行为 → `CHECK_STATUS_CODE = False`
+
+### 新增
+
+- **`Retry-After` 退避** —— 429 / 503 重试时读该头（秒数与 HTTP-date 都支持），
+  按服务端要求等待。超过 `RETRY_AFTER_MAX`（默认 60s）则不再等待、直接判失败 ——
+  等十分钟不值得占着一个工作线程
+- **指数退避** —— `RETRY_BACKOFF > 0` 时按 `base × 2^(重试次数-1)` 等待并加抖动
+  （抖动避免多个 worker 同步重试），封顶 `RETRY_AFTER_MAX`
+- 新异常 `HttpStatusError(RequestError)`，带 `.status_code`
+
+等待时长**只有一个计算入口**，优先级固定：`Retry-After` > 指数退避 > `SPIDER_RETRY_INTERVAL`。
+
+### 说明
+
+这一版的动因是 0.6.0：它把默认吞吐提高了约 3.2×，而当时框架**没有任何限速与失败处理**。
+更快地打目标站、同时把错误页当数据入库，是需要马上补上的责任缺口。
+per-domain 限速与 robots.txt 在后续版本。
+
 ## [0.6.0] - 2026-09-05
 
 存储扩展 + 一次由实测驱动的性能修复。**升级即得约 3.2× 吞吐，无需改任何配置。**
@@ -142,7 +181,8 @@
 - **命令行** —— `mineworker create` 脚手架、`shell` 交互调试、`retry` 失败重放
 - mkdocs-material 文档站
 
-[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/apersonw/mineworker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/apersonw/mineworker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/apersonw/mineworker/releases/tag/v0.5.0
 [0.4.0]: https://github.com/apersonw/mineworker/releases/tag/v0.4.0

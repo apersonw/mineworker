@@ -39,6 +39,17 @@ SPIDER_THREAD_COUNT: int = 4
 SPIDER_MAX_RETRY_TIMES: int = 3
 SPIDER_RETRY_INTERVAL: float = 0.0  # 重试前等待（秒）
 
+# ---- 状态码策略（0.7.0 起默认开启，行为与 0.6.0 不同）----
+# 此前不检查状态码：429 / 503 / 404 的响应体会直接进 parse() 被当成数据。
+# 现在 2xx/3xx 放行、429 与 5xx 重试、其余判失败。设 False 回到旧行为。
+CHECK_STATUS_CODE: bool = True
+RETRY_STATUS_CODES: list[int] = [429, 500, 502, 503, 504]
+ACCEPT_STATUS_CODES: list[int] = []  # 除 2xx/3xx 外还当成功的码，如 [404] 让 parse 自己处理
+# 429 / 503 的 Retry-After 最多认多久（秒）；超过则不再等待、直接判失败。0 = 不读该头
+RETRY_AFTER_MAX: float = 60.0
+# 指数退避基数（秒）：>0 时按 base * 2**(retry-1) 等待并加抖动，封顶 RETRY_AFTER_MAX。0 = 关
+RETRY_BACKOFF: float = 0.0
+
 # ---- 分布式 Spider ----
 SPIDER_KEEP_ALIVE: bool = False  # True = 爬完不退出，继续轮询队列（配合 TaskSpider / 常驻 worker）
 SPIDER_SEED_LOCK_TTL: int = 86400  # start_requests 一次性锁的 TTL（秒）

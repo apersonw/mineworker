@@ -19,6 +19,17 @@ class RequestError(MineWorkerError):
     """请求下载失败（网络异常、超时、状态码不符合预期等）。"""
 
 
+class HttpStatusError(RequestError):
+    """响应状态码不被接受（非 2xx/3xx，且不在 `ACCEPT_STATUS_CODES` 里）。
+
+    继承 `RequestError`，因此复用既有的下载失败重试路径与 `mineworker retry` 回放。
+    """
+
+    def __init__(self, status_code: int, url: str = "") -> None:
+        self.status_code = status_code
+        super().__init__(f"HTTP {status_code}{f'：{url}' if url else ''}")
+
+
 class AntiBotError(RequestError):
     """响应疑似反爬拦截页（Cloudflare / Akamai 挑战页等）。
 

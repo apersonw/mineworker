@@ -31,6 +31,11 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RANDOM_USER_AGENT` | `True` | 自动注入随机 UA |
 | `USE_SESSION` | `False` | 复用 httpx 连接（连同 cookie jar）。实测再增约 1.2× 吞吐；注意开启后 cookie 会跨请求共享 |
 | `DOWNLOADER_MIDDLEWARES` | `[]` | 下载中间件点号路径 |
+| `CHECK_STATUS_CODE` | `True` | **0.7.0 起默认开启**：非 2xx/3xx 不再进 `parse()`。设 `False` 回到旧行为 |
+| `RETRY_STATUS_CODES` | `[429,500,502,503,504]` | 这些码触发重试 |
+| `ACCEPT_STATUS_CODES` | `[]` | 除 2xx/3xx 外还当成功的码，如 `[404]` 让 `parse` 自己处理 |
+| `RETRY_AFTER_MAX` | `60.0` | 429/503 的 `Retry-After` 最多认多久（秒）；超过判失败。`0` = 不读该头 |
+| `RETRY_BACKOFF` | `0.0` | 指数退避基数（秒），`0` = 关，沿用 `SPIDER_RETRY_INTERVAL` |
 | `DOWNLOADER_ASYNC` | `False` | 普通请求走 [`AsyncHttpxDownloader`](async-kernel.md)（共享连接池 / HTTP/2） |
 | `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器最大在途请求数 |
 | `HTTPX_HTTP2` | `False` | httpx 开 HTTP/2（需 `pip install "httpx[http2]"`） |

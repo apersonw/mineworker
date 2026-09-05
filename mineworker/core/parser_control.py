@@ -8,7 +8,14 @@ from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from mineworker import setting
-from mineworker.exceptions import NotRetryError, RequestError, SpiderError, ValidationError
+from mineworker.exceptions import (
+    HttpStatusError,
+    NotRetryError,
+    RequestError,
+    SpiderError,
+    ValidationError,
+)
+from mineworker.network import status as status_policy
 from mineworker.network.downloader import download_request
 from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.request import Request
@@ -104,6 +111,10 @@ class ParserWorker(threading.Thread):
                 return
             response = resp_out
 
+        # 状态码检查排在 validate 之前：状态码不对就不该再跑用户的校验与回调
+        if response is not None and not self._check_status(request, response):
+            return
+
         if response is not None and not self._validate(request, response):
             return
 
@@ -120,6 +131,28 @@ class ParserWorker(threading.Thread):
             return
 
         self._stats.incr(sk.REQUEST_OK)
+
+    def _check_status(self, request: Request, response: Response) -> bool:
+        """按状态码策略放行 / 重试 / 判失败。返回 False 表示本次处理到此为止。"""
+        verdict = status_policy.classify(response)
+        if verdict == "ok":
+            return True
+        exc = HttpStatusError(response.status_code, response.url)
+        reason = f"HTTP {response.status_code}"
+        if verdict == "retry":
+            # 服务端要求等太久时不值得占着 worker 干等，直接判失败让位给别的任务
+            too_long = status_policy.retry_after_too_long(response, now=time.time())
+            if too_long is not None:
+                self._fail(
+                    request,
+                    response,
+                    reason=f"{reason}（Retry-After {too_long:.0f}s 超过上限）",
+                )
+            else:
+                self._retry_or_fail(request, response, exc, reason=reason)
+        else:
+            self._fail(request, response, reason=reason)
+        return False
 
     def _validate(self, request: Request, response: Response) -> bool:
         try:
@@ -183,8 +216,9 @@ class ParserWorker(threading.Thread):
             request.method,
             request.url,
         )
-        if setting.SPIDER_RETRY_INTERVAL:
-            time.sleep(setting.SPIDER_RETRY_INTERVAL)
+        delay = status_policy.retry_delay(request, response, now=time.time())
+        if delay > 0:
+            time.sleep(delay)
         self._request_buffer.put_retry(request)
 
     def _fail(self, request: Request, response: Response | None, *, reason: str) -> None:
