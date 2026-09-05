@@ -20,6 +20,9 @@
 - **v2.9** —— [反爬对抗](anti-bot.md)：`CurlDownloader`（curl_cffi 伪装真实浏览器的
   TLS / HTTP2 指纹，`DOWNLOADER_IMPERSONATE`）+ 自动抑制矛盾的随机 UA +
   Cloudflare / Akamai 挑战页识别（`AntiBotError`，走既有重试与换代理）
+- **v3.1** —— [吞吐画像与两处性能修复](async-kernel.md#实测2026-09)：建 `benchmarks/` 拿实测证据，
+  **否决了 async 批量分发**（瓶颈不在线程模型）；缓存 SSL context（默认配置 **3.2× 吞吐**，
+  语义零变化）、接通死配置 `USE_SESSION`
 - **v3.0** —— [存储扩展](item-pipeline.md#postgresql)：抽出 `SqlPipeline` 基类，新增
   `PostgresPipeline`（`ON CONFLICT` 三种冲突模式）、`ElasticsearchPipeline`、
   `KafkaPipeline`；并补上**真实数据库集成测试**（Postgres 与 MySQL 都跑，CI 用
@@ -29,9 +32,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| **修 `USE_SESSION` 死配置** | 该设置从没被读过，只有 `Request(use_session=)` 生效。实测开启连接复用值 **3.8× 吞吐** |
-| **默认线程数与争用** | 实测零延迟下 4 线程 1,277 QPS、128 线程 503 QPS —— 线程越多越慢，需定位争用点并调整默认值 |
-| ~~async 批量分发~~ | ❌ **实测后否决**：瓶颈不在线程模型，见 [async 内核评估](async-kernel.md#实测2026-09) |
+| — | 暂无。下一步方向待定 |
 
 ## 设计约束
 

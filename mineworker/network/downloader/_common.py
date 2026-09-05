@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import ssl
+import threading
 from typing import TYPE_CHECKING, Any
+
+import httpx
 
 from mineworker import setting
 from mineworker.network.proxy_pool import get_proxy_pool
@@ -13,6 +17,35 @@ if TYPE_CHECKING:
 
 # httpx 0.28 用 follow_redirects 取代 allow_redirects；这些键只能给 client，不能随请求传
 CLIENT_ONLY_KEYS = frozenset({"verify", "proxy", "proxies", "cookies"})
+
+# ----------------------------------------------------------------------
+# SSL context 缓存
+#
+# httpx.Client() 每次构造都会新建一个 SSLContext（加载 CA 包）——实测 ~33ms/个。
+# 而下载器默认每个请求新建一个 Client（use_session=False），于是这 33ms 变成了
+# 每请求的固定开销，是框架里最大的单项成本。把 context 缓存下来复用后降到 ~0.4ms。
+#
+# 复用 SSLContext 是安全的：它是无状态的配置对象，httpx / ssl 模块本身也鼓励共享。
+# 注意这与「共享 Client」不同 —— 后者会连 cookie jar 一起共享，改变抓取语义。
+_ssl_cache: dict[Any, ssl.SSLContext] = {}
+_ssl_lock = threading.Lock()
+
+
+def ssl_context_for(verify: Any) -> Any:
+    """把 ``verify`` 值换成可复用的 ``SSLContext``；不可缓存的原样返回。"""
+    # False（不校验）和已经是 SSLContext 的，都没有构造开销
+    if verify is False or isinstance(verify, ssl.SSLContext):
+        return verify
+    key = verify if isinstance(verify, str) else True
+    cached = _ssl_cache.get(key)
+    if cached is not None:
+        return cached
+    with _ssl_lock:
+        cached = _ssl_cache.get(key)
+        if cached is None:
+            cached = httpx.create_ssl_context(verify=verify)
+            _ssl_cache[key] = cached
+    return cached
 
 
 def pick_proxy(request: Request, fallback: str | None = None) -> str | None:

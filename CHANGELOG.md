@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+### 新增
+
+- PostgreSQL / Elasticsearch / Kafka 管道；抽出 `SqlPipeline` 基类
+- `benchmarks/` 吞吐画像套件
+
+### 性能
+
+- **默认配置下吞吐提升约 3.2×**（32 线程 97 → 308 QPS）：缓存 `SSLContext`。
+  `httpx.Client()` 每次构造要新建 SSL context（实测 32.9ms），而下载器默认每请求
+  新建一个 Client —— 这是框架最大的单项开销。缓存后降到 0.4ms。
+  **抓取语义零变化**（cookie 仍每请求隔离）
+
+### 修复
+
+- `setting.USE_SESSION` 是死配置：定义了、文档写了，但框架代码从没读过它，
+  只有 `Request(use_session=)` 生效。现在两者都生效（请求级优先）
+
 ## [0.5.0] - 2026-09-04
 
 反爬对抗：从 TLS 握手层解决问题，而不是继续换 User-Agent。

@@ -13,6 +13,7 @@ from mineworker.network.downloader._common import (
     pick_proxy,
     report_bad_proxy,
     send_kwargs,
+    ssl_context_for,
 )
 from mineworker.network.downloader.base import Downloader
 from mineworker.network.response import Response
@@ -46,7 +47,7 @@ class HttpxDownloader(Downloader):
         verify: bool,
         cookies: dict[str, str] | None = None,
     ) -> httpx.Client:
-        kwargs: dict[str, Any] = {"follow_redirects": True, "verify": verify}
+        kwargs: dict[str, Any] = {"follow_redirects": True, "verify": ssl_context_for(verify)}
         if setting.HTTPX_HTTP2:
             kwargs["http2"] = True
         if proxy:

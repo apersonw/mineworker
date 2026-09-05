@@ -19,7 +19,12 @@ import httpx
 
 from mineworker import setting
 from mineworker.exceptions import RequestError
-from mineworker.network.downloader._common import pick_proxy, report_bad_proxy, send_kwargs
+from mineworker.network.downloader._common import (
+    pick_proxy,
+    report_bad_proxy,
+    send_kwargs,
+    ssl_context_for,
+)
 from mineworker.network.downloader.base import Downloader
 from mineworker.network.response import Response
 from mineworker.utils.log import get_logger
@@ -63,7 +68,7 @@ class AsyncHttpxDownloader(Downloader):
         )
         kwargs: dict[str, Any] = {
             "follow_redirects": True,
-            "verify": self._verify,
+            "verify": ssl_context_for(self._verify),
             "limits": limits,
         }
         if setting.HTTPX_HTTP2:
@@ -85,7 +90,10 @@ class AsyncHttpxDownloader(Downloader):
         async with self._sem:
             try:
                 if proxy is not None or cookies:
-                    one_shot: dict[str, Any] = {"follow_redirects": True, "verify": verify}
+                    one_shot: dict[str, Any] = {
+                        "follow_redirects": True,
+                        "verify": ssl_context_for(verify),
+                    }
                     if proxy is not None:
                         one_shot["proxy"] = proxy
                     if cookies:

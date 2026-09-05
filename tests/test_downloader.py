@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from mineworker import Request, RequestError
+from mineworker import Request, RequestError, setting
 from mineworker.network.downloader import (
     HttpxDownloader,
     close_default_downloaders,
@@ -116,3 +116,52 @@ def test_explicit_downloader_and_context_manager() -> None:
         assert resp.text == "ok"
         assert dl._client is not None
     assert dl._client is None  # __exit__ 已 close
+
+
+# ---- USE_SESSION 曾是死配置（benchmark 里两行数字一模一样才暴露）------------
+def test_use_session_setting_is_honored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`setting.USE_SESSION` 必须真的生效 —— 它一度只是个装饰品。"""
+    from mineworker.network.downloader import get_default_downloader
+
+    monkeypatch.setattr(setting, "USE_SESSION", True)
+    monkeypatch.setattr(setting, "DOWNLOADER_ASYNC", False)
+    monkeypatch.setattr(setting, "DOWNLOADER_IMPERSONATE", "")
+    dl = get_default_downloader(Request("http://x/"))
+    assert isinstance(dl, HttpxDownloader)
+    assert dl._use_session is True
+
+
+def test_request_use_session_overrides_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mineworker.network.downloader import get_default_downloader
+
+    monkeypatch.setattr(setting, "USE_SESSION", True)
+    monkeypatch.setattr(setting, "DOWNLOADER_ASYNC", False)
+    monkeypatch.setattr(setting, "DOWNLOADER_IMPERSONATE", "")
+    dl = get_default_downloader(Request("http://x/", use_session=False))
+    assert dl._use_session is False
+
+
+def test_use_session_default_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mineworker.network.downloader import get_default_downloader
+
+    monkeypatch.setattr(setting, "DOWNLOADER_ASYNC", False)
+    monkeypatch.setattr(setting, "DOWNLOADER_IMPERSONATE", "")
+    assert get_default_downloader(Request("http://x/"))._use_session is False
+
+
+# ---- SSL context 缓存：每请求新建 Client 的最大单项开销 --------------------
+def test_ssl_context_is_cached() -> None:
+    """同一个 verify 值必须拿到同一个 SSLContext —— 否则每请求 ~33ms 白花。"""
+    from mineworker.network.downloader._common import ssl_context_for
+
+    assert ssl_context_for(True) is ssl_context_for(True)
+
+
+def test_ssl_context_passthrough_for_uncacheable() -> None:
+    import ssl as _ssl
+
+    from mineworker.network.downloader._common import ssl_context_for
+
+    assert ssl_context_for(False) is False
+    ctx = _ssl.create_default_context()
+    assert ssl_context_for(ctx) is ctx
