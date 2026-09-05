@@ -139,6 +139,12 @@ POSTGRES_POOL_SIZE: int = 5
 POSTGRES_ON_CONFLICT: str = "nothing"
 POSTGRES_CONFLICT_TARGET: list[str] = []  # update 模式下的冲突列，通常是唯一索引的列
 
+# ---- Elasticsearch（需 pip install "mineworker[elasticsearch]"）----
+ELASTICSEARCH_HOSTS: list[str] = ["http://localhost:9200"]
+
+# ---- Kafka（需 pip install "mineworker[kafka]"）----
+KAFKA_BOOTSTRAP_SERVERS: list[str] = ["localhost:9092"]
+
 # ---- Redis（分布式 Spider / 持久化去重）----
 REDIS_URL: str = "redis://localhost:6379/0"
 REDIS_KEY_PREFIX: str = "mineworker"  # 所有 Redis key 的命名空间前缀

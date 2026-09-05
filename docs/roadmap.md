@@ -20,12 +20,15 @@
 - **v2.9** —— [反爬对抗](anti-bot.md)：`CurlDownloader`（curl_cffi 伪装真实浏览器的
   TLS / HTTP2 指纹，`DOWNLOADER_IMPERSONATE`）+ 自动抑制矛盾的随机 UA +
   Cloudflare / Akamai 挑战页识别（`AntiBotError`，走既有重试与换代理）
+- **v3.0** —— [存储扩展](item-pipeline.md#postgresql)：抽出 `SqlPipeline` 基类，新增
+  `PostgresPipeline`（`ON CONFLICT` 三种冲突模式）、`ElasticsearchPipeline`、
+  `KafkaPipeline`；并补上**真实数据库集成测试**（Postgres 与 MySQL 都跑，CI 用
+  service containers）—— 此前 `MysqlPipeline` 从没跑过真库
 
 ## 计划中
 
 | 能力 | 说明 |
 |---|---|
-| **存储扩展** | PostgreSQL / Elasticsearch / Kafka 管道，抽一层批量写基类复用 `MysqlPipeline` 的套路 |
 | **async 批量分发** | 突破 worker「1 线程 1 在途」天花板。**前置条件**：先有 benchmark 拿到实测证据，见 [async 内核评估](async-kernel.md#何时重新评估) |
 
 ## 设计约束

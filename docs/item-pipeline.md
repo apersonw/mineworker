@@ -101,6 +101,44 @@ POSTGRES_CONFLICT_TARGET = ["url"]   # 通常是唯一索引的列
     未被打包进本项目，因此不影响 MineWorker 的授权；但如果贵司对 LGPL 依赖有合规要求，
     这里提前知会一声。
 
+## Elasticsearch
+
+`pip install "mineworker[elasticsearch]"`，地址走 `ELASTICSEARCH_HOSTS`。
+`table_name` 当索引名，`save_items` 走官方 `helpers.bulk`。
+
+```python
+ITEM_PIPELINES = ["mineworker.pipelines.elasticsearch.ElasticsearchPipeline"]
+```
+
+`UpdateItem` 会把 `__update_key__` 各字段的值拼成 `_id` 做 upsert（`doc_as_upsert`），
+所以重跑不会产生重复文档。索引与 mapping 由你自己管，框架不替你建索引。
+
+## Kafka
+
+`pip install "mineworker[kafka]"`，地址走 `KAFKA_BOOTSTRAP_SERVERS`。
+`table_name` 当 topic，每条 Item 序列化成一条 JSON 消息。
+
+```python
+ITEM_PIPELINES = ["mineworker.pipelines.kafka.KafkaPipeline"]
+```
+
+!!! warning "它是投递，不是存储"
+    这个管道只保证消息发出去了（每批 `flush` 后才返回成功），下游怎么落库不归它管。
+    因此**不支持 `UpdateItem`** —— 消息队列没有「按主键更新一条已发出的消息」这种语义。
+    要既投递又落库，把 Kafka 和一个数据库管道一起写进 `ITEM_PIPELINES` 即可。
+
+## 管道能力对照
+
+| 管道 | extra | `save_items` | `UpdateItem` | 备注 |
+|---|---|---|---|---|
+| `ConsolePipeline` | — | ✅ | ✅ | 默认，打日志 |
+| `CsvPipeline` | — | ✅ | ❌ | 按表名分文件 |
+| `MongoPipeline` | `mongo` | ✅ | ✅ | `update_one(upsert=True)` |
+| `MysqlPipeline` | `mysql` | ✅ | ✅ | `ON DUPLICATE KEY UPDATE` |
+| `PostgresPipeline` | `postgres` | ✅ | ✅ | `ON CONFLICT`，见上 |
+| `ElasticsearchPipeline` | `elasticsearch` | ✅ | ✅ | `_id` 由 `__update_key__` 拼出 |
+| `KafkaPipeline` | `kafka` | ✅ | ❌ | 投递而非存储 |
+
 ## 去重
 
 - **请求级**：`Request.filter_repeat=True` 时按 `fingerprint`（method + 规范化 URL + body）去重

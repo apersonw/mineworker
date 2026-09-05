@@ -76,6 +76,13 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `POSTGRES_ON_CONFLICT` | `"nothing"` | `error` 冲突报错 / `nothing` 跳过 / `update` upsert |
 | `POSTGRES_CONFLICT_TARGET` | `[]` | `update` 模式下的冲突列，通常是唯一索引的列 |
 
+## Elasticsearch / Kafka
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `ELASTICSEARCH_HOSTS` | `["http://localhost:9200"]` | 需 `pip install "mineworker[elasticsearch]"` |
+| `KAFKA_BOOTSTRAP_SERVERS` | `["localhost:9092"]` | 需 `pip install "mineworker[kafka]"` |
+
 ## 代理 / 渲染 / 指标 / 告警
 
 见 [中间件与代理](middleware-proxy.md)、[浏览器渲染](render.md)、[监控与调试](observability.md)。

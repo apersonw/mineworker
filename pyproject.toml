@@ -47,7 +47,9 @@ cli = ["typer>=0.12", "jinja2>=3.1"]
 metrics = ["prometheus-client>=0.20"]
 curl = ["curl_cffi>=0.16"]  # TLS / HTTP2 指纹伪装
 postgres = ["psycopg[binary,pool]>=3.1"]  # 注意 psycopg 是 LGPL-3.0
-all = ["mineworker[render,mongo,mysql,postgres,redis,cli,metrics,curl]"]
+elasticsearch = ["elasticsearch>=8.0"]
+kafka = ["kafka-python>=2.0"]
+all = ["mineworker[render,mongo,mysql,postgres,elasticsearch,kafka,redis,cli,metrics,curl]"]
 dev = [
     "mineworker[all]",
     "pytest>=8",
@@ -121,6 +123,8 @@ module = [
     "curl_cffi.*",
     "psycopg.*",
     "psycopg_pool.*",
+    "elasticsearch.*",
+    "kafka.*",
 ]
 ignore_missing_imports = true
 
