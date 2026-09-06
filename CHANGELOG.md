@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-07
+
+分布式节点的数据丢失修复。**容器化部署的用户建议尽快升级。**
+
 ### 修复
 
 - **节点被 `SIGTERM` 停止时会永久丢失已领取的任务** —— 框架只安装了 `SIGINT`
@@ -264,7 +268,8 @@ per-domain 限速与 robots.txt 在后续版本。
 - **命令行** —— `mineworker create` 脚手架、`shell` 交互调试、`retry` 失败重放
 - mkdocs-material 文档站
 
-[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/apersonw/mineworker/releases/tag/v0.8.1
 [0.8.0]: https://github.com/apersonw/mineworker/releases/tag/v0.8.0
 [0.7.0]: https://github.com/apersonw/mineworker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/apersonw/mineworker/releases/tag/v0.6.0
