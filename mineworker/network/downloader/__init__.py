@@ -9,6 +9,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from mineworker import setting
+from mineworker.network import throttle
 from mineworker.network.downloader._common import resolve_impersonate
 from mineworker.network.downloader._httpx import HttpxDownloader
 from mineworker.network.downloader.base import Downloader
@@ -80,7 +81,11 @@ def _build(key: str, request: Request) -> Downloader:
 
 
 def download_request(request: Request, downloader: Downloader | None = None) -> Response:
-    response = (downloader or get_default_downloader(request)).download(request)
+    # 限速放在这里而不是中间件里：parser_control 中 process_request 与下载处在两个
+    # 独立的 try，下载抛异常时 process_response 不会执行，中间件拿的名额会泄漏。
+    # 这里的 with 保证无论成功失败都释放。
+    with throttle.slot(request.url):
+        response = (downloader or get_default_downloader(request)).download(request)
     if setting.ANTIBOT_DETECT:
         # 放在这里而不是各下载器里：httpx / curl / async / playwright 一次覆盖
         from mineworker.network import antibot

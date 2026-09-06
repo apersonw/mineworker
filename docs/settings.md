@@ -31,6 +31,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RANDOM_USER_AGENT` | `True` | 自动注入随机 UA |
 | `USE_SESSION` | `False` | 复用 httpx 连接（连同 cookie jar）。实测再增约 1.2× 吞吐；注意开启后 cookie 会跨请求共享 |
 | `DOWNLOADER_MIDDLEWARES` | `[]` | 下载中间件点号路径 |
+| `CONCURRENT_REQUESTS_PER_DOMAIN` | `8` | 单域最大在途；`0` = 不限。**进程内生效**，见[限速](spider.md#限速) |
+| `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限 |
+| `RANDOMIZE_DOWNLOAD_DELAY` | `True` | 给上面的间隔加 ±50% 抖动 |
 | `CHECK_STATUS_CODE` | `True` | **0.7.0 起默认开启**：非 2xx/3xx 不再进 `parse()`。设 `False` 回到旧行为 |
 | `RETRY_STATUS_CODES` | `[429,500,502,503,504]` | 这些码触发重试 |
 | `ACCEPT_STATUS_CODES` | `[]` | 除 2xx/3xx 外还当成功的码，如 `[404]` 让 `parse` 自己处理 |

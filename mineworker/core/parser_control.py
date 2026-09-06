@@ -16,6 +16,7 @@ from mineworker.exceptions import (
     ValidationError,
 )
 from mineworker.network import status as status_policy
+from mineworker.network import throttle
 from mineworker.network.downloader import download_request
 from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.request import Request
@@ -140,6 +141,14 @@ class ParserWorker(threading.Thread):
         exc = HttpStatusError(response.status_code, response.url)
         reason = f"HTTP {response.status_code}"
         if verdict == "retry":
+            # 被限速时把冷却抑制到整个域：只让撞上 429 的这个 worker 等是没用的，
+            # 其余 worker 会继续满速打同一个域，退避形同虚设
+            cooldown = status_policy.retry_after_seconds(response, now=time.time())
+            if cooldown:
+                # 惩罚要和 RETRY_AFTER_MAX 一起封顶：服务端说「一小时后再来」时我们
+                # 已经决定放弃这个请求，就不该再给整个域挂一小时冷却 —— 那会让爬虫
+                # 在该域上彻底停摆，且 worker 全睡在 throttle 里
+                throttle.penalize(request.url, min(cooldown, setting.RETRY_AFTER_MAX))
             # 服务端要求等太久时不值得占着 worker 干等，直接判失败让位给别的任务
             too_long = status_policy.retry_after_too_long(response, now=time.time())
             if too_long is not None:

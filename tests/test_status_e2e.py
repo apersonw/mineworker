@@ -22,6 +22,9 @@ from mineworker.network.downloader import close_default_downloaders
 
 @pytest.fixture(autouse=True)
 def _quiet() -> Iterator[None]:
+    from mineworker.network import throttle
+
+    throttle.reset()
     setting.ITEM_PIPELINES = []
     setting.SPIDER_THREAD_COUNT = 1
     setting.LOG_LEVEL = "CRITICAL"
@@ -30,6 +33,7 @@ def _quiet() -> Iterator[None]:
     log.configure()
     yield
     close_default_downloaders()
+    throttle.reset()
 
 
 def _run(spider: mw.AirSpider) -> None:
@@ -167,3 +171,77 @@ def test_check_disabled_restores_0_6_behavior(
 
     _run(S())
     assert parsed == [404], "关掉开关后应回到 0.6.0 的全部放行"
+
+
+# ---- per-domain 限速的端到端行为 --------------------------------------
+def test_concurrency_cap_observed_by_server(
+    httpserver: HTTPServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """服务端观测到的并发必须被压到上限 —— 证明限速真的作用在完整链路上。"""
+    from mineworker.network import throttle
+
+    throttle.reset()
+    monkeypatch.setattr(setting, "CONCURRENT_REQUESTS_PER_DOMAIN", 2)
+    monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 8)
+
+    live = 0
+    peak = 0
+    lock = __import__("threading").Lock()
+
+    def handler(request: WRequest) -> WResponse:
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        time.sleep(0.05)
+        with lock:
+            live -= 1
+        return WResponse("<h1>ok</h1>", content_type="text/html")
+
+    httpserver.expect_request("/p").respond_with_handler(handler)
+
+    class S(mw.AirSpider):
+        def start_requests(self):  # type: ignore[no-untyped-def]
+            for i in range(12):
+                yield mw.Request(
+                    httpserver.url_for("/p") + f"?i={i}",
+                    callback=self.parse,
+                    filter_repeat=False,
+                )
+
+        def parse(self, request, response):  # type: ignore[no-untyped-def]
+            return None
+
+    _run(S())
+    throttle.reset()
+    assert peak <= 2, f"单域并发应被压到 2，服务端观测到 {peak}"
+
+
+def test_default_cap_does_not_bind_default_threads(
+    httpserver: HTTPServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """默认上限 8 > 默认线程数 4 —— 对默认配置应当完全无感。"""
+    from mineworker.network import throttle
+
+    throttle.reset()
+    monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 4)
+    httpserver.expect_request("/q").respond_with_data("<h1>ok</h1>", content_type="text/html")
+    seen: list[int] = []
+
+    class S(mw.AirSpider):
+        def start_requests(self):  # type: ignore[no-untyped-def]
+            for i in range(8):
+                yield mw.Request(
+                    httpserver.url_for("/q") + f"?i={i}",
+                    callback=self.parse,
+                    filter_repeat=False,
+                )
+
+        def parse(self, request, response):  # type: ignore[no-untyped-def]
+            seen.append(response.status_code)
+
+    t0 = time.monotonic()
+    _run(S())
+    throttle.reset()
+    assert len(seen) == 8
+    assert time.monotonic() - t0 < 5, "默认配置不该被限速拖慢"

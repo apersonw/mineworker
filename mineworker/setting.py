@@ -82,6 +82,12 @@ REQUEST_TIMEOUT: float = 22.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
+# ---- per-domain 限速（按域名分账；⚠️ 进程内生效，分布式 N 个节点就是 N 倍）----
+CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不限
+# 默认 8 > 默认线程数 4，所以对默认配置无感 —— 它是调大线程数时的安全网
+DOWNLOAD_DELAY: float = 0.0  # 同域两次请求的最小间隔（秒）；0 = 不限
+RANDOMIZE_DOWNLOAD_DELAY: bool = True  # 给上面的间隔加 ±50% 抖动（整齐节奏本身是机器人特征）
+
 # ---- 下载器 ----
 # True = 普通请求走 AsyncHttpxDownloader：一个事件循环线程 + 共享 AsyncClient 承载所有在途连接
 # （连接池 / keep-alive / HTTP/2 被所有 worker 共享）。API 与线程模型不变。详见 docs/async-kernel.md
