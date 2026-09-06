@@ -50,3 +50,26 @@ def test_run_once_produces_sane_metrics(downloader: str) -> None:
     assert r.peak_inflight >= 1
     assert 0 < r.avg_inflight <= r.peak_inflight
     assert r.wall > 0
+
+
+# ---- soak 画像的防腐 --------------------------------------------------
+def test_rss_probe_returns_a_number() -> None:
+    from soak import rss_mb
+
+    value = rss_mb()
+    assert value == value, "rss_mb() 返回了 NaN —— ps 探测坏了"
+    assert value > 0
+
+
+def test_one_shot_runs_and_reports() -> None:
+    """soak 的单轮能跑通并打出一行 markdown。"""
+    import io
+    from contextlib import redirect_stdout
+
+    from soak import _one_shot
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        _one_shot(threads=2, n=10)
+    line = buf.getvalue().strip()
+    assert line.startswith("| 2 |") and line.endswith("|"), line
