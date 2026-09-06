@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **`examples/`** —— 可以直接跑的完整示例。首个是
+  [`books_toscrape.py`](https://github.com/apersonw/mineworker/tree/main/examples)：
+  两级抓取（列表页翻页 → 详情页）、`cb_kwargs` 传状态、`Item` + `__unique_key__` 去重，
+  以及真实站点上该配的礼貌性设置。抓的是 Zyte 专为爬虫练习搭建的站点，可以放心跑。
+
+    配套两层防腐测试：结构检查（不联网，进 CI）+ 真跑一遍（`network` 标记，
+    不进 CI）—— 站点改版让选择器失效时，只有后者能发现。
+
 ## [0.8.0] - 2026-09-06
 
 长跑生存：目标站挂了别死磕，定时任务跑够能停。

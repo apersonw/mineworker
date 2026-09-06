@@ -49,6 +49,14 @@ class NewsSpider(mw.AirSpider):
 NewsSpider().start()
 ```
 
+## 示例
+
+[`examples/`](examples/) 里有可以直接跑的完整例子：
+
+```bash
+python examples/books_toscrape.py   # 两级抓取：列表页翻页 → 详情页
+```
+
 ## 文档
 
 完整文档：**<https://apersonw.github.io/mineworker/>**

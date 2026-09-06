@@ -79,6 +79,7 @@ include = [
     "/mineworker",
     "/tests",
     "/docs",
+    "/examples",
     "/mkdocs.yml",
     "/README.md",
     "/CHANGELOG.md",
@@ -100,6 +101,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.ruff.lint.per-file-ignores]
 # 测试里频繁定义局部爬虫子类，__custom_setting__ 用普通 dict 更自然
 "tests/*" = ["RUF012"]
+# 示例要展示框架实际教用户写的形式（脚手架模板里的 __unique_key__ 就是普通 list），
+# 为了过 lint 改成 ClassVar 反而不像真实用法
+"examples/*" = ["RUF012"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["mineworker"]

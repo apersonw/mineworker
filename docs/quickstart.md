@@ -75,3 +75,15 @@ MONGO_DB = "news"
 ```
 
 或用环境变量：`MINEWORKER_SPIDER_THREAD_COUNT=8 python main.py`。
+
+## 完整示例
+
+仓库的 [`examples/`](https://github.com/apersonw/mineworker/tree/main/examples)
+里有可以直接跑的例子：
+
+```bash
+python examples/books_toscrape.py
+```
+
+演示两级抓取（列表页翻页 → 详情页）、`cb_kwargs` 传状态、`Item` 去重，
+以及真实站点上该配的礼貌性设置。
