@@ -15,7 +15,7 @@ from mineworker.exceptions import (
     SpiderError,
     ValidationError,
 )
-from mineworker.network import robots, throttle
+from mineworker.network import circuit, robots, throttle
 from mineworker.network import status as status_policy
 from mineworker.network.downloader import download_request
 from mineworker.network.middleware import MiddlewareManager
@@ -140,6 +140,8 @@ class ParserWorker(threading.Thread):
             return
 
         self._stats.incr(sk.REQUEST_OK)
+        # 成功即清零该域的连续失败计数（熔断只认「连续」）
+        circuit.record_success(request.url)
 
     def _check_status(self, request: Request, response: Response) -> bool:
         """按状态码策略放行 / 重试 / 判失败。返回 False 表示本次处理到此为止。"""
@@ -164,11 +166,12 @@ class ParserWorker(threading.Thread):
                     request,
                     response,
                     reason=f"{reason}（Retry-After {too_long:.0f}s 超过上限）",
+                    exc=exc,
                 )
             else:
                 self._retry_or_fail(request, response, exc, reason=reason)
         else:
-            self._fail(request, response, reason=reason)
+            self._fail(request, response, reason=reason, exc=exc)
         return False
 
     def _validate(self, request: Request, response: Response) -> bool:
@@ -217,7 +220,7 @@ class ParserWorker(threading.Thread):
         reason: str,
     ) -> None:
         if request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
-            self._fail(request, response, reason=reason)
+            self._fail(request, response, reason=reason, exc=exc)
             return
         request.retry_times += 1
         self._stats.incr(sk.RETRY)
@@ -238,8 +241,19 @@ class ParserWorker(threading.Thread):
             time.sleep(delay)
         self._request_buffer.put_retry(request)
 
-    def _fail(self, request: Request, response: Response | None, *, reason: str) -> None:
+    def _fail(
+        self,
+        request: Request,
+        response: Response | None,
+        *,
+        reason: str,
+        exc: BaseException | None = None,
+    ) -> None:
         self._stats.incr(sk.REQUEST_FAILED)
+        # 在这里而不是每次失败都数：重试期间代理池已经轮换过出口，
+        # 所以「代理坏了」会被重试吸收，只有站点真的挂了才会连续走到这里
+        if circuit.counts_as_unhealthy(exc, response):
+            circuit.record_failure(request.url)
         log.error(
             "{}，放弃：{} {}（已重试 {} 次）",
             reason,

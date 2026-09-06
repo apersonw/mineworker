@@ -37,6 +37,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `ROBOTS_OBEY` | `False` | 遵守 robots.txt。**脚手架生成的项目里默认 `True`**，见 [robots.txt](spider.md#robotstxt) |
 | `ROBOTS_USER_AGENT` | `"*"` | 按哪个 UA 组匹配（随机 UA 下按具体 UA 匹配没有意义） |
 | `ROBOTS_CACHE_TTL` | `3600.0` | robots.txt 缓存时长（秒），`0` = 永不过期 |
+| `CIRCUIT_FAILURE_THRESHOLD` | `10` | 同域连续失败多少次跳闸；`0` = 关闭。**404 等 4xx 不计**，见[熔断](spider.md#熔断) |
+| `CIRCUIT_COOLDOWN` | `60.0` | 跳闸后该域冷却多久（秒） |
+| `SPIDER_MAX_RUNTIME` | `0.0` | 运行时长上限（秒），到点优雅停止；`0` = 不限 |
 | `CHECK_STATUS_CODE` | `True` | **0.7.0 起默认开启**：非 2xx/3xx 不再进 `parse()`。设 `False` 回到旧行为 |
 | `RETRY_STATUS_CODES` | `[429,500,502,503,504]` | 这些码触发重试 |
 | `ACCEPT_STATUS_CODES` | `[]` | 除 2xx/3xx 外还当成功的码，如 `[404]` 让 `parse` 自己处理 |

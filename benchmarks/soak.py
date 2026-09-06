@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import os
 import subprocess
 import sys
 import threading
@@ -32,17 +33,31 @@ from mineworker.network.downloader import close_default_downloaders
 
 
 def rss_mb() -> float:
-    """当前 RSS（不是峰值）。
+    """当前 RSS（不是峰值），MB。
 
     `resource.getrusage` 给的是 ru_maxrss —— **峰值，只增不减**，同一进程内
-    连跑多个配置会互相污染。这里用 ps 取当前值，跨 macOS / Linux 且不引依赖。
+    连跑多个配置会互相污染，所以不能用它。
+
+    优先读 /proc（Linux，无需外部进程）；macOS 没有 /proc，回落到 ps。
+    **不能只用 ps**：python:3.12-slim 之类的精简镜像根本没装它（procps 包），
+    直接 FileNotFoundError —— 这是在 Linux 容器里实测撞出来的。
     """
-    out = subprocess.run(
-        ["ps", "-o", "rss=", "-p", str(__import__("os").getpid())],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
+    statm = Path("/proc/self/statm")
+    if statm.exists():
+        try:
+            resident_pages = int(statm.read_text().split()[1])
+            return resident_pages * os.sysconf("SC_PAGE_SIZE") / (1024 * 1024)
+        except (OSError, ValueError, IndexError):
+            pass
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(os.getpid())],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    except (FileNotFoundError, OSError):
+        return float("nan")
     return int(out) / 1024 if out.isdigit() else float("nan")
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import signal
 import threading
+import time
 from types import FrameType
 from typing import TYPE_CHECKING, Any
 
@@ -170,7 +171,16 @@ class BaseScheduler:
 
     def _wait_until_done(self) -> None:
         streak = 0
+        limit = setting.SPIDER_MAX_RUNTIME
+        deadline = time.monotonic() + limit if limit > 0 else None
         while not self._stop_event.is_set():
+            if deadline is not None and time.monotonic() >= deadline:
+                # 不设 _interrupted：那个标志只服务于「再按一次 Ctrl-C 强制退出」，
+                # 超时不该改变后续 SIGINT 的语义。这里走正常的 teardown 路径：
+                # flush 缓冲区、dump 未完成请求，然后正常返回。
+                log.warning("达到 SPIDER_MAX_RUNTIME={:.0f}s，优雅停止", limit)
+                self._stop_event.set()
+                return
             if self._is_done():
                 streak += 1
                 if streak >= setting.DONE_CHECK_TIMES:

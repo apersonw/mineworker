@@ -54,10 +54,15 @@ def test_run_once_produces_sane_metrics(downloader: str) -> None:
 
 # ---- soak 画像的防腐 --------------------------------------------------
 def test_rss_probe_returns_a_number() -> None:
+    """RSS 探测必须在精简镜像里也能用。
+
+    最初只 shell 到 `ps`，而 python:3.12-slim 没装它（procps 包）——
+    在 Linux 容器里直接 FileNotFoundError。现在优先读 /proc/self/statm。
+    """
     from soak import rss_mb
 
     value = rss_mb()
-    assert value == value, "rss_mb() 返回了 NaN —— ps 探测坏了"
+    assert value == value, "rss_mb() 返回 NaN —— RSS 探测在本平台不可用"
     assert value > 0
 
 

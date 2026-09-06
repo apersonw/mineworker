@@ -97,6 +97,18 @@ ROBOTS_OBEY: bool = False
 ROBOTS_USER_AGENT: str = "*"
 ROBOTS_CACHE_TTL: float = 3600.0  # robots.txt 缓存时长（秒），0 = 永不过期
 
+# ---- 熔断（目标站挂了就别再死磕）----
+# 同域连续失败到阈值 → 该域冷却一段时间，所有工作线程一起避让。
+# 只数「站点不健康」的信号（网络错误 / 5xx / 429）；404 等 4xx 不计 ——
+# 按 ID 顺序探测时连续几十个 404 很正常，拿它跳闸会把正常爬取搞瘫。
+CIRCUIT_FAILURE_THRESHOLD: int = 10  # 0 = 关闭熔断
+CIRCUIT_COOLDOWN: float = 60.0  # 跳闸后该域冷却多久（秒）
+
+# ---- 运行时长上限 ----
+# 到点走优雅停止（flush 缓冲区、dump 未完成请求）并正常返回，不抛异常 ——
+# 定时任务「跑够一小时就停」不该被当成错误。0 = 不限。
+SPIDER_MAX_RUNTIME: float = 0.0
+
 # ---- 下载器 ----
 # True = 普通请求走 AsyncHttpxDownloader：一个事件循环线程 + 共享 AsyncClient 承载所有在途连接
 # （连接池 / keep-alive / HTTP/2 被所有 worker 共享）。API 与线程模型不变。详见 docs/async-kernel.md
