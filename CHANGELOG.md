@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-06
+
+长跑生存：目标站挂了别死磕，定时任务跑够能停。
+
 ### 新增
 
 - **按域熔断** —— 同域**连续**失败到 `CIRCUIT_FAILURE_THRESHOLD`（默认 10）次时，
@@ -21,6 +25,12 @@
 - **运行时长上限** —— `SPIDER_MAX_RUNTIME`（默认 `0` = 不限）。到点走优雅停止：
   flush 缓冲区、dump 未完成请求，然后**正常返回不抛异常** ——
   定时任务「跑够就停」不该被当成错误。
+
+### 说明
+
+顺带做了一次长跑内存画像，结论是**没有泄漏**：16 线程跑 600 秒、约 11 万请求后
+RSS 在 ~127MB 收敛（最后 1/4 斜率 +0.22 MB/分钟），每线程边际成本约 0.05MB。
+工具在 [`benchmarks/soak.py`](https://github.com/apersonw/mineworker/blob/main/benchmarks/soak.py)。
 
 ## [0.7.0] - 2026-09-05
 
@@ -225,7 +235,8 @@ per-domain 限速与 robots.txt 在后续版本。
 - **命令行** —— `mineworker create` 脚手架、`shell` 交互调试、`retry` 失败重放
 - mkdocs-material 文档站
 
-[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/apersonw/mineworker/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/apersonw/mineworker/releases/tag/v0.8.0
 [0.7.0]: https://github.com/apersonw/mineworker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/apersonw/mineworker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/apersonw/mineworker/releases/tag/v0.5.0
