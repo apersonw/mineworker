@@ -241,3 +241,43 @@ def test_penalty_must_be_capped_by_caller() -> None:
     with th._lock:
         scheduled = th._next_at["a.com"] - time.monotonic()
     assert scheduled > 3000, "throttle 不做封顶，封顶是调用方的责任"
+
+
+# ---- 全局限速（GLOBAL_THROTTLE）---------------------------------------
+def test_global_throttle_falls_back_to_local_when_redis_down(monkeypatch) -> None:
+    """Redis 连不上时退回**进程内限速**，而不是变成不限速。
+
+    限速器一挂就放开手脚打目标站，是这里最不该有的失败模式 —— 所以断言的是
+    「仍然在等」，不是「没报错」。
+    """
+    from mineworker.network import global_throttle
+
+    global_throttle.reset()
+    monkeypatch.setattr(setting, "GLOBAL_THROTTLE", True)
+    monkeypatch.setattr(setting, "DOWNLOAD_DELAY", 0.05)
+    monkeypatch.setattr(setting, "RANDOMIZE_DOWNLOAD_DELAY", False)
+    monkeypatch.setattr(
+        "mineworker.db.redisdb.get_redis",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Redis 连不上")),
+    )
+
+    th = throttle.DomainThrottle()
+    assert th._take_ticket("example.com") == pytest.approx(0.0, abs=0.01)
+    # 第二次必须还在排队 —— 说明本地兜底真的接上了
+    assert th._take_ticket("example.com") >= 0.04
+
+
+def test_global_throttle_penalize_also_recorded_locally(monkeypatch) -> None:
+    """全局惩罚同时落一份本地：Redis 中途失联时冷却不会跟着丢。"""
+    from mineworker.network import global_throttle
+
+    global_throttle.reset()
+    monkeypatch.setattr(setting, "GLOBAL_THROTTLE", True)
+    monkeypatch.setattr(
+        "mineworker.db.redisdb.get_redis",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Redis 连不上")),
+    )
+
+    th = throttle.DomainThrottle()
+    th.penalize("https://example.com/x", 5.0)
+    assert th._take_ticket("example.com") >= 4.5
