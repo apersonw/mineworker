@@ -6,6 +6,7 @@ AirScheduler / RedisScheduler 复用这里的线程编排、结束检测循环�
 
 from __future__ import annotations
 
+import contextlib
 import signal
 import threading
 import time
@@ -66,7 +67,8 @@ class BaseScheduler:
         self._workers: list[ParserWorker] = []
         self._stop_event = threading.Event()
         self._interrupted = False
-        self._orig_sigint: Any = None
+        #: 安装前的原始信号处理器，退出时还原
+        self._orig_handlers: dict[signal.Signals, Any] = {}
 
     # ------------------------------------------------------------------
     # 子类钩子
@@ -213,21 +215,36 @@ class BaseScheduler:
         self._on_shutdown()
 
     # ------------------------------------------------------------------
+    #: 都要优雅接管。**SIGTERM 尤其重要**：docker stop / K8s 驱逐 / systemctl stop
+    #: 全都发它，而分布式节点被硬杀时，collector 本地缓冲里最多 COLLECTOR_TASK_COUNT
+    #: 个已从 Redis 领走（zpopmin 取走即删）的任务会永久丢失 —— 实测 24 个任务的
+    #: 场景下 SIGTERM 丢了 20 个，SIGINT 则全部恢复。
+    _SIGNALS = (signal.SIGINT, signal.SIGTERM)
+
     def _install_signal(self) -> None:
-        if threading.current_thread() is threading.main_thread():
-            self._orig_sigint = signal.getsignal(signal.SIGINT)
-            signal.signal(signal.SIGINT, self._on_sigint)
+        if threading.current_thread() is not threading.main_thread():
+            return
+        for sig in self._SIGNALS:
+            try:
+                self._orig_handlers[sig] = signal.getsignal(sig)
+                signal.signal(sig, self._on_signal)
+            except (ValueError, OSError):  # pragma: no cover - 平台不支持该信号
+                self._orig_handlers.pop(sig, None)
 
     def _restore_signal(self) -> None:
-        if self._orig_sigint is not None and threading.current_thread() is threading.main_thread():
-            signal.signal(signal.SIGINT, self._orig_sigint)
-            self._orig_sigint = None
+        if threading.current_thread() is not threading.main_thread():
+            return
+        for sig, handler in list(self._orig_handlers.items()):
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(sig, handler)
+        self._orig_handlers.clear()
 
-    def _on_sigint(self, signum: int, frame: FrameType | None) -> None:
+    def _on_signal(self, signum: int, frame: FrameType | None) -> None:
+        name = signal.Signals(signum).name
         if self._interrupted:
-            log.warning("再次收到中断，强制退出")
+            log.warning("再次收到 {}，强制退出", name)
             self._restore_signal()
             raise KeyboardInterrupt
         self._interrupted = True
-        log.warning("收到中断，正在优雅停止（再按一次强制退出）")
+        log.warning("收到 {}，正在优雅停止（再来一次强制退出）", name)
         self._stop_event.set()

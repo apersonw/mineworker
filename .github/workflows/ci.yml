@@ -45,6 +45,12 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
       mysql:
         image: mysql:8
         env:
@@ -70,6 +76,7 @@ jobs:
         env:
           MINEWORKER_TEST_POSTGRES_URL: postgresql://postgres:mineworker@127.0.0.1:5432/mineworker
           MINEWORKER_TEST_MYSQL_URL: mysql://root:mineworker@127.0.0.1:3306/mineworker
+          MINEWORKER_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: pytest -ra -m "not network" --cov --cov-report=term-missing
 
   docs:

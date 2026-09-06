@@ -134,3 +134,19 @@ class ProductSpider(mw.TaskSpider):
 | `TASK_POLL_INTERVAL` | `2.0` | 轮询任务源的间隔（秒） |
 | `TASK_BATCH_SIZE` | `100` | 单次拉多少个 |
 | `TASK_EXHAUST_POLLS` | `3` | 连续这么多次拉不到任务，视为耗尽（`keep_alive=False` 时据此退出） |
+
+## 停止节点：用 SIGTERM 或 SIGINT，别用 SIGKILL
+
+节点收到 `SIGTERM` / `SIGINT` 时会优雅停止：把 collector 与 buffer 里**已从 Redis
+领走但还没跑完**的任务**推回队列**，交给其他节点或下次重启接管。
+
+这一步不能省。`Collector` 一次会 `get_batch` 领走最多 `COLLECTOR_TASK_COUNT`（默认 100）
+个任务，而 Redis 队列用的是 `zpopmin` —— **取走即删**。节点被 `SIGKILL`（`kill -9`）
+硬杀时没有任何机会推回，这批任务就永久丢失了。
+
+!!! note "实测"
+    24 个任务的场景下，节点被硬杀会丢掉 20 个；优雅停止则全数恢复、且无重复。
+    `docker stop`、Kubernetes 驱逐、`systemctl stop` 发的都是 `SIGTERM`，
+    都会走优雅停止这条路。只有 `kill -9` 和 OOM Killer 绕不过去。
+
+要缩小硬杀的损失面，可以调小 `COLLECTOR_TASK_COUNT`（代价是更频繁地访问 Redis）。

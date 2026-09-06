@@ -45,6 +45,16 @@ def postgres_db() -> Iterator[Any]:
 
 
 @pytest.fixture
+def redis_url() -> str:
+    """真 Redis 的连接串。
+
+    分布式能力此前只用 fakeredis + 单进程测过 —— 那既不含真正的并发竞争，
+    也不跨进程。这个夹具让集成测试连真实例。
+    """
+    return _db_url("MINEWORKER_TEST_REDIS_URL")
+
+
+@pytest.fixture
 def mysql_db() -> Iterator[Any]:
     from mineworker.db.mysqldb import MysqlDB
 

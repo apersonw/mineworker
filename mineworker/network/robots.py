@@ -81,6 +81,7 @@ class RobotsCache:
         self._lock = threading.Lock()
         self._entries: dict[str, _Entry] = {}
         self._domain_locks: dict[str, threading.Lock] = {}
+        self._warned_can_fetch = False
 
     # ------------------------------------------------------------------
     def _domain_lock(self, domain: str) -> threading.Lock:
@@ -167,6 +168,11 @@ class RobotsCache:
         try:
             return bool(parser.can_fetch(setting.ROBOTS_USER_AGENT, url))
         except Exception:
+            # 静默放行是危险的：若对每个 URL 都抛异常，会「全部放行」而毫无提示。
+            # 只警告一次，避免刷屏，但至少让人知道 robots 判定实际没在工作。
+            if not self._warned_can_fetch:
+                self._warned_can_fetch = True
+                log.warning("robots 规则判定异常，按「无限制」处理", exc_info=True)
             return True
 
     def crawl_delay(self, url: str) -> float | None:

@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **节点被 `SIGTERM` 停止时会永久丢失已领取的任务** —— 框架只安装了 `SIGINT`
+  处理器。`Collector` 一次从 Redis 领走最多 `COLLECTOR_TASK_COUNT`（默认 100）个任务，
+  而队列用 `zpopmin`（取走即删）；`SIGTERM` 没有处理器 → 进程直接终止 →
+  `_on_shutdown` 里「把本地缓冲推回 Redis」的逻辑没机会执行。
+
+    实测 24 个任务的场景：`SIGTERM` 丢 20 个，`SIGINT` 全数恢复。而 `SIGTERM` 正是
+    `docker stop` / Kubernetes 驱逐 / `systemctl stop` 所发的信号 —— 容器化部署下
+    每次停节点都在丢任务。现在两个信号都走优雅停止。
+
+- `robots.txt` 规则判定异常时不再完全静默 —— 此前 `can_fetch` 抛异常会直接放行
+  且无任何日志，若对每个 URL 都抛异常会「全部放行」而无人察觉。现在告警一次。
+
+### 说明
+
+新增真 Redis + **真多进程**的集成测试。此前 839 行分布式代码全部只用 `fakeredis` +
+单进程测过 —— 既没有真正的并发竞争，也不跨进程。上面那个 `SIGTERM` 缺陷就是它抓出来的。
+
 ### 新增
 
 - **`examples/`** —— 可以直接跑的完整示例。首个是

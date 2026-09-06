@@ -100,8 +100,7 @@ class ParserWorker(threading.Thread):
             # 被 robots.txt 禁止是**有意跳过**，不是失败 —— 不该污染失败率，
             # 也不该进 failed_requests.jsonl 等着被回放
             self._stats.incr(sk.ROBOTS_DROPPED)
-            log.debug("robots.txt 禁止，跳过：{}", request.url)
-            self._stats.incr(sk.DROPPED)
+            self._drop(request)
             return
 
         if response is None and request.auto_request:

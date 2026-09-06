@@ -35,6 +35,8 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限 |
 | `RANDOMIZE_DOWNLOAD_DELAY` | `True` | 给上面的间隔加 ±50% 抖动 |
 | `ROBOTS_OBEY` | `False` | 遵守 robots.txt。**脚手架生成的项目里默认 `True`**，见 [robots.txt](spider.md#robotstxt) |
+
+> 结束行里的「robots 拦截」是「丢弃」的**子集**而非并列项 —— 被 robots 拦下的请求同时计入两者，求和会重复计。
 | `ROBOTS_USER_AGENT` | `"*"` | 按哪个 UA 组匹配（随机 UA 下按具体 UA 匹配没有意义） |
 | `ROBOTS_CACHE_TTL` | `3600.0` | robots.txt 缓存时长（秒），`0` = 永不过期 |
 | `CIRCUIT_FAILURE_THRESHOLD` | `10` | 同域连续失败多少次跳闸；`0` = 关闭。**404 等 4xx 不计**，见[熔断](spider.md#熔断) |
