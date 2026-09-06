@@ -32,8 +32,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `USE_SESSION` | `False` | 复用 httpx 连接（连同 cookie jar）。实测再增约 1.2× 吞吐；注意开启后 cookie 会跨请求共享 |
 | `DOWNLOADER_MIDDLEWARES` | `[]` | 下载中间件点号路径 |
 | `CONCURRENT_REQUESTS_PER_DOMAIN` | `8` | 单域最大在途；`0` = 不限。**进程内生效**，见[限速](spider.md#限速) |
-| `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限 |
+| `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限。默认进程内生效，见 `GLOBAL_THROTTLE` |
 | `RANDOMIZE_DOWNLOAD_DELAY` | `True` | 给上面的间隔加 ±50% 抖动 |
+| `GLOBAL_THROTTLE` | `False` | 让 `DOWNLOAD_DELAY` 跨节点全局生效（需 Redis）。关闭时 N 个节点就是 N 倍速率，见[全局限速](spider.md#跨节点全局限速) |
 | `ROBOTS_OBEY` | `False` | 遵守 robots.txt。**脚手架生成的项目里默认 `True`**，见 [robots.txt](spider.md#robotstxt) |
 
 > 结束行里的「robots 拦截」是「丢弃」的**子集**而非并列项 —— 被 robots 拦下的请求同时计入两者，求和会重复计。

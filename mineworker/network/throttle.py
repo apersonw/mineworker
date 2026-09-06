@@ -3,9 +3,10 @@
 框架此前唯一的节流是 `SPIDER_THREAD_COUNT`，抓多域名时所有线程可能全压在一个域上。
 这里按域名分账：并发用信号量，间隔用「取号」排队。
 
-.. warning::
-   **这是进程内限速。** 分布式 `Spider` 起 N 个节点，目标站承受的就是 N 倍。
-   真正的全局限速需要 Redis 令牌桶，目前没做 —— 别以为配了这个就一定礼貌。
+并发上限是**进程内**的：分布式 N 个节点，单域在途请求就是 N 倍上限。
+请求间隔则可以全局化 —— 打开 `GLOBAL_THROTTLE` 后由
+[`global_throttle`](global_throttle.py) 用 Redis 记账，N 个节点合起来
+才是配置的那个速率。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from mineworker import setting
+from mineworker.network import global_throttle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -65,6 +67,14 @@ class DomainThrottle:
         if delay > 0 and setting.RANDOMIZE_DOWNLOAD_DELAY:
             # 整齐的请求节奏本身就是机器人特征
             delay *= random.uniform(0.5, 1.5)
+        if setting.GLOBAL_THROTTLE:
+            # 不能因为 delay<=0 就跳过这次 Redis 往返：penalize() 写的整域冷却
+            # 也存在同一个 key 里，而 DOWNLOAD_DELAY 默认就是 0 —— 跳过会让 429
+            # 冷却对默认配置静默失效（本地版在这里栽过一次，见下面的注释）
+            wait = global_throttle.take_ticket(domain, delay)
+            if wait is not None:
+                return wait
+            # None = Redis 不可用，往下走本地限速兜底
         with self._lock:
             now = time.monotonic()
             # 用 0.0 作缺省再取 max(now, ...) 是安全的：外层的 max 保证了
@@ -105,6 +115,11 @@ class DomainThrottle:
         if seconds <= 0:
             return
         domain = domain_of(url)
+        if setting.GLOBAL_THROTTLE:
+            # 全局记一笔，让**所有节点**一起避开 —— 只有本节点退避是没用的，
+            # 别的节点会继续满速打同一个域。返回值（要等多久）在这里不关心
+            global_throttle.take_ticket(domain, seconds)
+        # 本地也记一笔：Redis 中途失联退回本地限速时，惩罚不会跟着丢
         with self._lock:
             now = time.monotonic()
             ready = max(now, self._next_at.get(domain, 0.0))

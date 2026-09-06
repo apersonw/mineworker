@@ -82,11 +82,16 @@ REQUEST_TIMEOUT: float = 22.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
 
-# ---- per-domain 限速（按域名分账；⚠️ 进程内生效，分布式 N 个节点就是 N 倍）----
+# ---- per-domain 限速（按域名分账）----
 CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不限
 # 默认 8 > 默认线程数 4，所以对默认配置无感 —— 它是调大线程数时的安全网
 DOWNLOAD_DELAY: float = 0.0  # 同域两次请求的最小间隔（秒）；0 = 不限
 RANDOMIZE_DOWNLOAD_DELAY: bool = True  # 给上面的间隔加 ±50% 抖动（整齐节奏本身是机器人特征）
+# 上面两项默认只在**进程内**生效，分布式 N 个节点就是 N 倍。打开下面这项后，
+# DOWNLOAD_DELAY 改由 Redis 全局记账，N 个节点合起来才是配置的那个速率。
+# 需要 REDIS_URL；Redis 不可用时自动退回进程内限速（不会变成不限速）。
+# 注意并发上限（CONCURRENT_REQUESTS_PER_DOMAIN）仍是进程内的。
+GLOBAL_THROTTLE: bool = False
 
 # ---- robots.txt ----
 # 库默认 False（把 MineWorker 当库嵌入、抓自己站点/内网时不该被意外拦）；
