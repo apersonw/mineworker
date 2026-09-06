@@ -12,6 +12,7 @@ RETRY = "retry"
 PARSE_ERROR = "parse_error"
 DEDUP_DROPPED = "dedup_dropped"
 DROPPED = "dropped"
+ROBOTS_DROPPED = "robots_dropped"
 ITEM = "item"
 ITEM_DEDUP_DROPPED = "item_dedup_dropped"
 ITEM_FAILED = "item_failed"
@@ -43,10 +44,15 @@ class Stats:
         elapsed = self.elapsed()
         ok = d.get(REQUEST_OK, 0)
         rate = ok / elapsed if elapsed else 0.0
-        return (
+        line = (
             f"用时 {elapsed:.1f}s | 请求成功 {ok} 失败 {d.get(REQUEST_FAILED, 0)} "
             f"| 重试 {d.get(RETRY, 0)} 丢弃 {d.get(DROPPED, 0)} "
             f"| 请求去重 {d.get(DEDUP_DROPPED, 0)} | 解析异常 {d.get(PARSE_ERROR, 0)} "
             f"| 入库 {d.get(ITEM, 0)} 条（去重 {d.get(ITEM_DEDUP_DROPPED, 0)}，"
             f"失败 {d.get(ITEM_FAILED, 0)}）| {rate:.1f} 请求/s"
         )
+        # 只在真的拦到过时才追加，别给没开这功能的人添噪音
+        blocked = d.get(ROBOTS_DROPPED, 0)
+        if blocked:
+            line += f" | robots 拦截 {blocked}"
+        return line

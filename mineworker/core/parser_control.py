@@ -15,8 +15,8 @@ from mineworker.exceptions import (
     SpiderError,
     ValidationError,
 )
+from mineworker.network import robots, throttle
 from mineworker.network import status as status_policy
-from mineworker.network import throttle
 from mineworker.network.downloader import download_request
 from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.request import Request
@@ -95,6 +95,14 @@ class ParserWorker(threading.Thread):
             return
         if replaced is not None:
             request = replaced
+
+        if response is None and request.auto_request and not robots.allowed(request.url):
+            # 被 robots.txt 禁止是**有意跳过**，不是失败 —— 不该污染失败率，
+            # 也不该进 failed_requests.jsonl 等着被回放
+            self._stats.incr(sk.ROBOTS_DROPPED)
+            log.debug("robots.txt 禁止，跳过：{}", request.url)
+            self._stats.incr(sk.DROPPED)
+            return
 
         if response is None and request.auto_request:
             try:

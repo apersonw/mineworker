@@ -88,6 +88,15 @@ CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不
 DOWNLOAD_DELAY: float = 0.0  # 同域两次请求的最小间隔（秒）；0 = 不限
 RANDOMIZE_DOWNLOAD_DELAY: bool = True  # 给上面的间隔加 ±50% 抖动（整齐节奏本身是机器人特征）
 
+# ---- robots.txt ----
+# 库默认 False（把 MineWorker 当库嵌入、抓自己站点/内网时不该被意外拦）；
+# `mineworker create -p` 生成的项目配置里默认写 True，新项目开箱合规。
+ROBOTS_OBEY: bool = False
+# 按哪个 User-Agent 匹配规则。默认 "*"（通配组）：框架默认随机 UA，
+# 每个请求的 UA 都不同，按具体 UA 匹配没有意义。
+ROBOTS_USER_AGENT: str = "*"
+ROBOTS_CACHE_TTL: float = 3600.0  # robots.txt 缓存时长（秒），0 = 永不过期
+
 # ---- 下载器 ----
 # True = 普通请求走 AsyncHttpxDownloader：一个事件循环线程 + 共享 AsyncClient 承载所有在途连接
 # （连接池 / keep-alive / HTTP/2 被所有 worker 共享）。API 与线程模型不变。详见 docs/async-kernel.md

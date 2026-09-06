@@ -9,6 +9,15 @@ SPIDER_MAX_RETRY_TIMES = 3
 REQUEST_TIMEOUT = 22
 RANDOM_USER_AGENT = True
 
+# ---- 礼貌性 ----
+# 新项目默认遵守 robots.txt（框架的库默认值是 False）。
+# 抓自己的站点 / 内网服务时可以关掉。
+ROBOTS_OBEY = True
+# 单域最大在途请求数；同域两次请求的最小间隔（秒）。
+# ⚠️ 进程内生效：分布式起 N 个节点，目标站承受的就是 N 倍。
+CONCURRENT_REQUESTS_PER_DOMAIN = 8
+DOWNLOAD_DELAY = 0
+
 # ---- 数据管道 ----
 ITEM_PIPELINES = [
     "mineworker.pipelines.console.ConsolePipeline",

@@ -37,6 +37,8 @@ class DomainThrottle:
         self._lock = threading.Lock()
         self._next_at: dict[str, float] = {}
         self._sems: dict[str, threading.Semaphore] = {}
+        #: robots.txt 的 Crawl-delay 等来源写入的每域间隔覆盖
+        self._domain_delay: dict[str, float] = {}
 
     # ------------------------------------------------------------------
     def _semaphore(self, domain: str) -> threading.Semaphore | None:
@@ -56,7 +58,10 @@ class DomainThrottle:
         持锁睡觉会让所有线程在同一把锁上串行；取号则让它们各自领到不同的
         起跑时刻，然后并行地各睡各的。
         """
-        delay = setting.DOWNLOAD_DELAY
+        with self._lock:
+            override = self._domain_delay.get(domain, 0.0)
+        # 站点自己声明的节奏（robots.txt 的 Crawl-delay）不该低于全局默认值
+        delay = max(setting.DOWNLOAD_DELAY, override)
         if delay > 0 and setting.RANDOMIZE_DOWNLOAD_DELAY:
             # 整齐的请求节奏本身就是机器人特征
             delay *= random.uniform(0.5, 1.5)
@@ -105,11 +110,17 @@ class DomainThrottle:
             ready = max(now, self._next_at.get(domain, 0.0))
             self._next_at[domain] = ready + seconds
 
+    def set_domain_delay(self, domain: str, seconds: float) -> None:
+        """为单个域设置间隔下限（robots.txt 的 ``Crawl-delay`` 用）。"""
+        with self._lock:
+            self._domain_delay[domain] = max(seconds, 0.0)
+
     def reset(self) -> None:
         """清空所有域的状态（测试用；也可在爬虫重启时调用）。"""
         with self._lock:
             self._next_at.clear()
             self._sems.clear()
+            self._domain_delay.clear()
 
 
 #: 进程级单例
@@ -122,6 +133,10 @@ def slot(url: str) -> AbstractContextManager[None]:
 
 def penalize(url: str, seconds: float) -> None:
     _default.penalize(url, seconds)
+
+
+def set_domain_delay(domain: str, seconds: float) -> None:
+    _default.set_domain_delay(domain, seconds)
 
 
 def reset() -> None:

@@ -29,6 +29,20 @@
 
 ### 新增
 
+- **robots.txt** —— `ROBOTS_OBEY`（库默认 `False`，但 `mineworker create -p` 生成的
+  项目配置里写 `True`，新项目开箱合规）、`ROBOTS_USER_AGENT`、`ROBOTS_CACHE_TTL`。
+
+    按域缓存，多线程首访也只抓一次。被禁止的 URL 不产生请求、计入结束行的
+    「robots 拦截」、**不算失败**（有意跳过不该污染失败率）。
+    robots.txt 的 `Crawl-delay` 会自动接管该域限速，取 `max(DOWNLOAD_DELAY, Crawl-delay)`。
+
+    抓不到 robots.txt 时（404 / 5xx / 超时）**放行**并打 warning ——
+    一次瞬时 500 不该让整个爬虫停摆。
+
+    小数 `Crawl-delay` 自行解析：标准库 `RobotFileParser` 只接受整数
+    （用 `isdigit()` 判断），会静默丢弃 `Crawl-delay: 0.5` —— 那等于爬得比站点
+    要求的还快。
+
 - **per-domain 限速** —— 按域名分账的并发上限与请求间隔：
   `CONCURRENT_REQUESTS_PER_DOMAIN`（默认 `8`）、`DOWNLOAD_DELAY`（默认 `0`，不限）、
   `RANDOMIZE_DOWNLOAD_DELAY`（默认 `True`）。

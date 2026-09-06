@@ -72,6 +72,42 @@ class MySpider(mw.AirSpider):
     def end_callback(self): ...     # 正常结束时一次
 ```
 
+## robots.txt
+
+```python
+ROBOTS_OBEY = True          # 库默认 False；脚手架生成的项目里默认 True
+ROBOTS_USER_AGENT = "*"     # 按哪个 UA 组匹配规则
+ROBOTS_CACHE_TTL = 3600.0   # 缓存多久；0 = 永不过期
+```
+
+开启后，每个请求发出前会按域检查 robots.txt（按域缓存，多线程首访也只抓一次）。
+被禁止的 URL **不会产生请求**，计入结束行的「robots 拦截」，且**不算失败** ——
+那是有意跳过，不该污染失败率、也不该进 `failed_requests.jsonl` 等着被回放。
+
+robots.txt 里的 `Crawl-delay` 会自动接管该域的[限速](#限速)，取
+`max(DOWNLOAD_DELAY, Crawl-delay)` —— 站点自己声明的节奏不该被全局默认值放宽。
+
+!!! note "为什么默认值是 `False`"
+    库默认关闭，但 `mineworker create -p` 生成的项目配置里写的是 `ROBOTS_OBEY = True`。
+    这样**新项目开箱合规**，而把 MineWorker 当库嵌入、或抓自己站点 / 内网服务的人
+    不会被意外拦住。
+
+!!! note "为什么按 `*` 匹配"
+    框架默认 `RANDOM_USER_AGENT = True`，每个请求的 UA 都不一样 ——
+    按具体 UA 匹配 robots 规则是没有意义的，所以默认匹配通配组。
+    有固定 UA 时把 `ROBOTS_USER_AGENT` 设成它即可。
+
+### 抓不到 robots.txt 时会放行
+
+| robots.txt 响应 | 处理 |
+|---|---|
+| 2xx | 按规则判定 |
+| 404 / 其他 4xx | 放行全部（没有 robots.txt = 没有限制） |
+| 5xx / 超时 / 解析失败 | **放行全部 + warning 日志** |
+
+最后一行是刻意的：`/robots.txt` 一次瞬时 500 不该让整个爬虫停摆，
+而且「什么都不抓也不报错」是最难排查的故障形态。
+
 ## 限速
 
 按**域名**分账，两个独立的旋钮：

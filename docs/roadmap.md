@@ -44,7 +44,7 @@
 | ~~**A · 非 2xx 的正确处理**~~ ✅ | `validate()` 默认返回 `True`，于是 429 / 503 / 404 的响应体**直接进 `parse()` 被当成数据**。加状态码策略：`RETRY_STATUS_CODES`（默认 429/5xx→重试）、`ACCEPT_STATUS_CODES`（额外放行）、其余非 2xx 丢弃并计失败 | ⚠️ **这是破坏性变更**。现在依赖「错误页也进 parse」的爬虫会行为改变。需要决定：默认启用 + 大版本号，还是先 opt-in 一个版本再改默认 |
 | ~~**B · 退避与 `Retry-After`**~~ ✅ | 429 / 503 重试时读 `Retry-After` 头（秒数或 HTTP 日期），按它等待而不是立刻重试；无该头时指数退避 + 抖动 | 与 `SPIDER_RETRY_INTERVAL`（现为 0.0）的关系要理顺，别出现两套退避 |
 | ~~**C · per-domain 限速**~~ ✅ | `DOWNLOAD_DELAY`（同域两次请求最小间隔）+ `CONCURRENT_REQUESTS_PER_DOMAIN` + `RANDOMIZE_DOWNLOAD_DELAY`（避免整齐节奏本身成为特征） | 分布式模式下这是**每进程**限速，N 个节点就是 N 倍。全局限速要 Redis 令牌桶——先做进程内并**在文档里写清这个限制**，别让人误以为是全局的 |
-| **D · robots.txt** | `urllib.robotparser` + 按域缓存，用框架自己的下载器抓取；同时读 `Crawl-delay` 喂给阶段 C | 默认值是个取舍：`True` 更礼貌但会让「抓自己站点」的用户困惑，`False` 则等于默认不合规。倾向默认 `True` + 一行显眼的关闭方法 |
+| ~~**D · robots.txt**~~ ✅ | `urllib.robotparser` + 按域缓存，用框架自己的下载器抓取；同时读 `Crawl-delay` 喂给阶段 C | 默认值是个取舍：`True` 更礼貌但会让「抓自己站点」的用户困惑，`False` 则等于默认不合规。倾向默认 `True` + 一行显眼的关闭方法 |
 
 ### v4.1 —— 长跑生存
 
