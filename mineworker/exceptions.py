@@ -30,6 +30,22 @@ class HttpStatusError(RequestError):
         super().__init__(f"HTTP {status_code}{f'：{url}' if url else ''}")
 
 
+class ResponseTooLargeError(RequestError):
+    """响应体超过 `MAX_RESPONSE_SIZE`，已中止传输。
+
+    继承 `RequestError` 以复用既有的失败路径，但**不会重试** ——
+    再抓一次还是一样大，重试只是把同样的流量和内存再烧一遍。
+    """
+
+
+class ContentTypeRejectedError(MineWorkerError):
+    """响应的 Content-Type 不在 `ALLOWED_CONTENT_TYPES` 白名单里。
+
+    这是**有意跳过**而不是失败：body 根本没有被读取，连接直接断开。
+    因此不计失败率、不进 `failed_requests.jsonl`（同 robots.txt 的处理）。
+    """
+
+
 class AntiBotError(RequestError):
     """响应疑似反爬拦截页（Cloudflare / Akamai 挑战页等）。
 

@@ -35,6 +35,8 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限。默认进程内生效，见 `GLOBAL_THROTTLE` |
 | `RANDOMIZE_DOWNLOAD_DELAY` | `True` | 给上面的间隔加 ±50% 抖动 |
 | `GLOBAL_THROTTLE` | `False` | 让 `DOWNLOAD_DELAY` 跨节点全局生效（需 Redis）。关闭时 N 个节点就是 N 倍速率，见[全局限速](spider.md#跨节点全局限速) |
+| `MAX_RESPONSE_SIZE` | `33554432` | 响应体上限（字节，32MB）；`0` = 不限。**行为变更**，见[资源边界](spider.md#资源边界) |
+| `ALLOWED_CONTENT_TYPES` | `[]` | Content-Type 前缀白名单；空 = 不过滤。命中不了的响应不读 body 直接断开 |
 | `ROBOTS_OBEY` | `False` | 遵守 robots.txt。**脚手架生成的项目里默认 `True`**，见 [robots.txt](spider.md#robotstxt) |
 
 > 结束行里的「robots 拦截」是「丢弃」的**子集**而非并列项 —— 被 robots 拦下的请求同时计入两者，求和会重复计。

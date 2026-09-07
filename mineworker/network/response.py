@@ -45,7 +45,14 @@ class Response:
 
     # ------------------------------------------------------------------
     @classmethod
-    def from_httpx(cls, resp: httpx.Response, request: Request | None = None) -> Response:
+    def from_httpx(
+        cls,
+        resp: httpx.Response,
+        request: Request | None = None,
+        content: bytes | None = None,
+    ) -> Response:
+        """``content`` 由流式下载的调用方传入 —— 流式响应上取 ``resp.content`` 会抛
+        `ResponseNotRead`，而且那样也绕开了大小上限。"""
         try:
             elapsed: float | None = resp.elapsed.total_seconds()
         except RuntimeError:
@@ -53,7 +60,7 @@ class Response:
         return cls(
             url=str(resp.url),
             status_code=resp.status_code,
-            content=resp.content,
+            content=resp.content if content is None else content,
             headers=dict(resp.headers),
             cookies=dict(resp.cookies),
             request=request,
@@ -63,7 +70,9 @@ class Response:
         )
 
     @classmethod
-    def from_curl_cffi(cls, resp: Any, request: Request | None = None) -> Response:
+    def from_curl_cffi(
+        cls, resp: Any, request: Request | None = None, content: bytes | None = None
+    ) -> Response:
         """由 :mod:`curl_cffi` 的响应构造（与 :meth:`from_httpx` 平行）。
 
         与 httpx 的差异：``elapsed`` 已经是秒（float）而非 timedelta，
@@ -75,7 +84,7 @@ class Response:
         return cls(
             url=str(resp.url),
             status_code=resp.status_code,
-            content=resp.content or b"",
+            content=(resp.content or b"") if content is None else content,
             headers=dict(resp.headers),
             cookies=dict(resp.cookies),
             request=request,

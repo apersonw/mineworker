@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import ssl
 import threading
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from mineworker import setting
+from mineworker.exceptions import ContentTypeRejectedError, ResponseTooLargeError
 from mineworker.network.proxy_pool import get_proxy_pool
 from mineworker.network.user_agent import get_random_user_agent
 
@@ -106,3 +108,58 @@ def send_kwargs(
     if headers:
         kwargs["headers"] = headers
     return kwargs
+
+
+# ----------------------------------------------------------------------
+# 资源边界：响应体大小上限 + Content-Type 白名单
+#
+# 三个下载器（httpx / async httpx / curl_cffi）共用这两个函数。它们都工作在
+# **拿到响应头、还没读 body** 的时刻 —— 这正是能省下带宽的唯一窗口。
+def check_content_type(headers: Any, url: str) -> None:
+    """Content-Type 不在白名单就抛 `ContentTypeRejectedError`（调用方据此断开连接）。"""
+    allowed = setting.ALLOWED_CONTENT_TYPES
+    if not allowed:
+        return
+    raw = headers.get("content-type") or headers.get("Content-Type") or ""
+    ctype = raw.split(";")[0].strip().lower()
+    if not ctype:
+        # 不少站点根本不发 Content-Type。没有信息时不替它下判断 ——
+        # 白名单是用来挡掉「明确说了自己是视频」的响应，不是用来挡沉默的
+        return
+    if not any(ctype.startswith(prefix.lower()) for prefix in allowed):
+        raise ContentTypeRejectedError(f"Content-Type {ctype!r} 不在白名单：{url}")
+
+
+def read_capped(chunks: Iterable[bytes], url: str, declared: str | None = None) -> bytes:
+    """按 `MAX_RESPONSE_SIZE` 边读边计数，超限立刻抛错（调用方退出上下文即断开）。
+
+    ``declared`` 是 ``Content-Length`` 头，只用来**提前**失败，绝不用来放行：
+    它报的是**压缩后**的大小，一个 200KB 的 gzip 可以解压成 200MB。真正的判据是
+    下面循环里累计的**解压后**字节数。
+
+    .. note::
+       对高压缩比的响应，这个上限**限制的是「留下多少」而不是「峰值分配多少」**：
+       httpx / curl 会把每个网络分片整个解压，压缩包一次到齐时解压器就会一次性
+       吐出全部内容，我们只能在那之后判定超限。实测 200KB→200MB 的 gzip 炸弹：
+       进程仍瞬时涨 ~180MB（不设上限时是 618MB，因为 ``.text`` 还要再解码一份）。
+       换句话说：**上限让请求快速失败并挡住二次放大，但挡不住那一次解压分配。**
+    """
+    limit = setting.MAX_RESPONSE_SIZE
+    if limit <= 0:
+        return b"".join(chunks)
+    if declared:
+        try:
+            if int(declared) > limit:
+                raise ResponseTooLargeError(
+                    f"响应体声明 {int(declared)} 字节，超过 MAX_RESPONSE_SIZE={limit}：{url}"
+                )
+        except ValueError:  # 头是坏的，交给下面按实际字节数判
+            pass
+    buf = bytearray()
+    for chunk in chunks:
+        buf += chunk
+        if len(buf) > limit:
+            raise ResponseTooLargeError(
+                f"响应体超过 MAX_RESPONSE_SIZE={limit} 字节，已中止传输：{url}"
+            )
+    return bytes(buf)

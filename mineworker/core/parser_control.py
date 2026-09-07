@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from mineworker import setting
 from mineworker.exceptions import (
+    ContentTypeRejectedError,
     HttpStatusError,
     NotRetryError,
     RequestError,
+    ResponseTooLargeError,
     SpiderError,
     ValidationError,
 )
@@ -106,6 +108,12 @@ class ParserWorker(threading.Thread):
         if response is None and request.auto_request:
             try:
                 response = download_request(request)
+            except ContentTypeRejectedError:
+                # 白名单之外的类型是**有意跳过**，body 压根没读、连接已断开 ——
+                # 和 robots.txt 一样不该污染失败率
+                self._stats.incr(sk.CONTENT_TYPE_DROPPED)
+                self._drop(request)
+                return
             except RequestError as exc:
                 self._retry_or_fail(request, None, exc, reason="下载失败")
                 return
@@ -218,7 +226,10 @@ class ParserWorker(threading.Thread):
         *,
         reason: str,
     ) -> None:
-        if request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
+        # 有些失败重试也没用：响应体超限的话，再抓一次还是一样大 ——
+        # 只是把同样的流量和内存再烧 SPIDER_MAX_RETRY_TIMES 遍
+        too_large = isinstance(exc, ResponseTooLargeError)
+        if too_large or request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
             self._fail(request, response, reason=reason, exc=exc)
             return
         request.retry_times += 1
