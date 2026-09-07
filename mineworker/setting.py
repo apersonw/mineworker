@@ -93,6 +93,16 @@ RANDOMIZE_DOWNLOAD_DELAY: bool = True  # 给上面的间隔加 ±50% 抖动（�
 # 注意并发上限（CONCURRENT_REQUESTS_PER_DOMAIN）仍是进程内的。
 GLOBAL_THROTTLE: bool = False
 
+# ---- 资源边界（响应体大小 / 类型）----
+# 框架此前会把**任何**响应整个读进内存，不看大小也不看类型。实测 200MB 的响应
+# 让进程 RSS 涨 618MB（bytes 一份、.text 解码又一份），4 个线程同时撞上 ~2.5GB ——
+# 容器里就是 OOM，而 OOM Killer 发 SIGKILL，会绕过优雅停止把已领取的任务打丢。
+MAX_RESPONSE_SIZE: int = 32 * 1024 * 1024  # 响应体上限（字节）；0 = 不限
+# 按**解压后**字节数计：Content-Length 报的是压缩后大小，只看它会被 gzip 炸弹绕过
+ALLOWED_CONTENT_TYPES: list[str] = []  # Content-Type 白名单前缀；空 = 不过滤
+# 例：["text/", "application/json", "application/xml"]。命中不了的响应**不读 body
+# 直接断开**，省的是带宽。默认空是因为有人就是故意抓 PDF / 图片的
+
 # ---- robots.txt ----
 # 库默认 False（把 MineWorker 当库嵌入、抓自己站点/内网时不该被意外拦）；
 # `mineworker create -p` 生成的项目配置里默认写 True，新项目开箱合规。

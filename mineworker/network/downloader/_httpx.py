@@ -10,7 +10,9 @@ from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
     CLIENT_ONLY_KEYS,
+    check_content_type,
     pick_proxy,
+    read_capped,
     report_bad_proxy,
     send_kwargs,
     ssl_context_for,
@@ -71,9 +73,16 @@ class HttpxDownloader(Downloader):
     def download(self, request: Request) -> Response:
         client, should_close, proxy = self._client_for(request)
         try:
-            resp = client.request(
+            # 流式：先拿到响应头，再决定要不要读 body、读多少。这是唯一一个
+            # 能在「2GB 已经进了内存」之前叫停的窗口 —— client.request() 返回时
+            # body 已经读完了，那时再判断大小毫无意义
+            with client.stream(
                 request.method, request.url, **send_kwargs(request, self._timeout)
-            )
+            ) as resp:
+                check_content_type(resp.headers, request.url)
+                content = read_capped(
+                    resp.iter_bytes(), request.url, resp.headers.get("content-length")
+                )
         except httpx.HTTPError as exc:
             if proxy:
                 report_bad_proxy(proxy)
@@ -81,7 +90,7 @@ class HttpxDownloader(Downloader):
         finally:
             if should_close:
                 client.close()
-        return Response.from_httpx(resp, request)
+        return Response.from_httpx(resp, request, content=content)
 
     def close(self) -> None:
         if self._client is not None:

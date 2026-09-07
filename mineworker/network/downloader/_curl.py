@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
+    check_content_type,
     pick_proxy,
+    read_capped,
     report_bad_proxy,
     resolve_impersonate,
     send_kwargs,
@@ -100,7 +102,19 @@ class CurlDownloader(Downloader):
             kwargs["impersonate"] = impersonate
         try:
             # method 在 Request.__init__ 里已 upper()，curl_cffi 的签名要 Literal
-            resp = session.request(cast("HttpMethod", request.method), request.url, **kwargs)
+            # stream=True：先拿响应头再决定读不读 body，和 httpx 那边同一个道理
+            # 标成 Any：curl_cffi 的 iter_content / close 没有类型标注，
+            # 在 strict 下会报 no-untyped-call。这里比逐行 type: ignore 干净
+            resp: Any = session.request(
+                cast("HttpMethod", request.method), request.url, stream=True, **kwargs
+            )
+            try:
+                check_content_type(resp.headers, request.url)
+                content = read_capped(
+                    resp.iter_content(), request.url, resp.headers.get("content-length")
+                )
+            finally:
+                resp.close()
         except _requests().RequestsError as exc:
             if proxy:
                 report_bad_proxy(proxy)
@@ -108,7 +122,7 @@ class CurlDownloader(Downloader):
         finally:
             if should_close:
                 session.close()
-        return Response.from_curl_cffi(resp, request)
+        return Response.from_curl_cffi(resp, request, content=content)
 
     def close(self) -> None:
         if self._session is not None:

@@ -20,7 +20,9 @@ import httpx
 from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
+    check_content_type,
     pick_proxy,
+    read_capped,
     report_bad_proxy,
     send_kwargs,
     ssl_context_for,
@@ -35,6 +37,28 @@ if TYPE_CHECKING:
 log = get_logger("downloader.async")
 
 _CLOSE_TIMEOUT = 5.0
+
+
+async def _stream(
+    client: httpx.AsyncClient, request: Request, kwargs: dict[str, Any]
+) -> tuple[httpx.Response, bytes]:
+    """与同步版同样的边界检查，只是要用 `aiter_bytes`。
+
+    `read_capped` 收的是同步迭代器，异步这边先把分片收进列表再交给它 ——
+    上限判断的逻辑只有一份，不重写第二遍（重写就会有一份先漂移）。
+    """
+    async with client.stream(request.method, request.url, **kwargs) as resp:
+        check_content_type(resp.headers, request.url)
+        limit = setting.MAX_RESPONSE_SIZE
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in resp.aiter_bytes():
+            chunks.append(chunk)
+            total += len(chunk)
+            if limit > 0 and total > limit:
+                break  # 提前跳出即断开连接，剩下的字节不会再传
+        content = read_capped(iter(chunks), request.url, resp.headers.get("content-length"))
+    return resp, content
 
 
 class AsyncHttpxDownloader(Downloader):
@@ -99,14 +123,14 @@ class AsyncHttpxDownloader(Downloader):
                     if cookies:
                         one_shot["cookies"] = cookies
                     async with httpx.AsyncClient(**one_shot) as client:
-                        resp = await client.request(request.method, request.url, **kwargs)
+                        resp, content = await _stream(client, request, kwargs)
                 else:
-                    resp = await self._client.request(request.method, request.url, **kwargs)
+                    resp, content = await _stream(self._client, request, kwargs)
             except httpx.HTTPError as exc:
                 if proxy is not None:
                     report_bad_proxy(proxy)
                 raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
-        return Response.from_httpx(resp, request)
+        return Response.from_httpx(resp, request, content=content)
 
     # ------------------------------------------------------------------
     def close(self) -> None:

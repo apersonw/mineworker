@@ -15,7 +15,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from mineworker import setting
-from mineworker.exceptions import HttpStatusError, RequestError
+from mineworker.exceptions import HttpStatusError, RequestError, ResponseTooLargeError
 from mineworker.network import throttle
 from mineworker.utils.log import get_logger
 
@@ -38,6 +38,10 @@ def counts_as_unhealthy(exc: BaseException | None, response: Response | None) ->
         return response.status_code in _UNHEALTHY_CODES
     if isinstance(exc, HttpStatusError):
         return exc.status_code in _UNHEALTHY_CODES
+    # 响应体超限是「这个 URL 太大」，不是「这个站挂了」—— 一个站上有几个
+    # 大 PDF 就把整域熔断，那是把礼貌性机制变成了自伤
+    if isinstance(exc, ResponseTooLargeError):
+        return False
     # 网络层错误（超时、连不上、TLS 失败……）
     return isinstance(exc, RequestError)
 
