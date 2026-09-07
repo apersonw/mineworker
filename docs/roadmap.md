@@ -1,6 +1,6 @@
 # Roadmap
 
-> 当前发行版本 **0.8.1** —— v1 + v2 的全部能力。变更明细见
+> 当前发行版本 **0.9.0** —— v1 + v2 的全部能力。变更明细见
 > [CHANGELOG](https://github.com/apersonw/mineworker/blob/main/CHANGELOG.md)。
 
 ## 已完成
