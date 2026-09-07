@@ -9,7 +9,7 @@
 一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> **0.9.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
+> **0.10.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
 > 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/mineworker/anti-bot/)。
 > 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/mineworker/roadmap/)。
 
