@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **非中断退出时不 dump 未完成请求。** `AirScheduler._on_shutdown` 的 dump 卡在
+  `self._interrupted` 上，而 `SPIDER_MAX_RUNTIME` 走的是**不设**这个标志的路径
+  （它只服务于「再按一次 Ctrl-C 强制退出」）—— 于是超时停止时缓冲区 / 队列里的
+  存货全部丢失。实测：5 条存货、非中断退出 → dump 文件里 **0 条**。
+
+    这也让 0.10.2 的兜底说法落了空：那次说「永久性故障仍由既有的
+    `DUMP_UNFINISHED_ON_EXIT` 在退出时兜底」，但 Redis 永久故障时请求会一直留在
+    缓冲区、爬虫永远不算完成、最后由 `SPIDER_MAX_RUNTIME` 停止 —— 恰好是不 dump
+    的那条路。现在只要还有存货就 dump，开关仍是 `DUMP_UNFINISHED_ON_EXIT`；
+    正常跑完的爬虫没有存货，不会平白多出文件。
+
+- **分布式节点退出时推回 Redis 失败没有兜底。** `RedisScheduler._on_shutdown`
+  逐个把存货推回队列，**而它恰恰是在「Redis 出问题」的场景下被调用的** ——
+  一旦 put 抛异常，剩下的请求既不在队列里、也不在缓冲区里，静默消失。
+  现在推不回去就落盘到 `FAILED_REQUEST_PATH`，等 `mineworker retry` 回放。
+  （和 0.10.2 修的 `flush` 是同一个形状，只是换了个地方。）
+
 ## [0.10.2] - 2026-09-07
 
 请求缓冲的失败处理。**分布式部署的用户建议升级** —— Redis 一次抖动就会
