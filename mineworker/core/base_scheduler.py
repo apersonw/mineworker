@@ -10,6 +10,7 @@ import contextlib
 import signal
 import threading
 import time
+from pathlib import Path
 from types import FrameType
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,7 @@ from mineworker.network.downloader import close_default_downloaders
 from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.proxy_pool import close_proxy_pool
 from mineworker.network.request import Request
+from mineworker.utils import tools
 from mineworker.utils.alert import AlertManager
 from mineworker.utils.log import get_logger
 from mineworker.utils.metrics import MetricsReporter
@@ -135,6 +137,24 @@ class BaseScheduler:
             + self._item_buffer.pending_count()
             + sum(worker.busy for worker in self._workers)
         )
+
+    def _dump_requests(self, requests: list[Request], why: str) -> None:
+        """把没能安置的请求落到 `FAILED_REQUEST_PATH`，等 ``mineworker retry`` 回放。
+
+        只记日志是不够的：日志会滚掉，而这些请求此刻是**唯一副本** ——
+        它们既不在队列里、也不在缓冲区里了。
+        """
+        if not requests or not setting.DUMP_UNFINISHED_ON_EXIT:
+            return
+        path = Path(setting.FAILED_REQUEST_PATH)
+        try:
+            with path.open("a", encoding="utf-8") as fh:
+                for request in requests:
+                    fh.write(tools.dumps_json(request.to_dict()) + "\n")
+        except Exception:
+            log.exception("dump 未完成请求失败，{} 条丢失：{}", len(requests), why)
+            return
+        log.warning("已 dump {} 条未完成请求到 {}（{}）", len(requests), path, why)
 
     def _local_idle(self) -> bool:
         return (

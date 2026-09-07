@@ -133,11 +133,22 @@ class RedisScheduler(BaseScheduler):
             *self._request_buffer.drain_pending(),
             *self._collector.drain(),
         ]
-        for request in leftovers:
+        for i, request in enumerate(leftovers):
+            # 已经过过去重了；不清掉的话推回去也会被自己的指纹挡掉
             request.filter_repeat = False
-            self._task_queue.put(request)
-        if leftovers:
-            log.info("已把 {} 条未完成请求推回 Redis 队列", len(leftovers))
+            try:
+                self._task_queue.put(request)
+            except Exception:
+                # 这个函数**恰恰是在「Redis 出问题」时被调用的** —— 推不回去就落盘，
+                # 否则剩下的请求静默消失：它们既不在队列里、也不在缓冲区里了
+                log.exception("推回 Redis 失败，改为落盘")
+                self._dump_requests(leftovers[i:], "退出时推回 Redis 失败")
+                pushed = i
+                break
+        else:
+            pushed = len(leftovers)
+        if pushed:
+            log.info("已把 {} 条未完成请求推回 Redis 队列", pushed)
 
     # ------------------------------------------------------------------
     def _on_failed_request(self, request: Any) -> None:
