@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-07
+
+`BatchSpider` 的并发正确性。**用 `BatchSpider` 的用户建议升级。**
+
 ### 修复
 
 - **`BatchSpider` 的 master 互斥一旦超时一次就永久破掉。** `_renew_lock` 是无条件
@@ -31,6 +35,11 @@
     正常单 master 部署下这个竞态不会撞车（`claim_tasks` 只由持锁的 master 调用）——
     真正会触发它的是上面那条锁缺陷。但 `BatchStore.claim_tasks` 是公开接口，
     自己写 master 的用户直接暴露在其中。
+
+- **没装 `[redis]` 时 `mineworker.db.mysqldb` 导不进来。** `mineworker/db/__init__.py`
+  在顶层 `from ... redisdb import ...`，而 redisdb 顶层 `import redis` —— 于是装了
+  `mineworker[mysql]` 但没装 redis 的用户，连 `MysqlDB` 都拿不到。
+  导一个子模块不该把父包的可选依赖一起拖进来。改成惰性导出。
 
 ### 测试
 
