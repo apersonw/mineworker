@@ -180,3 +180,25 @@ def test_content_type_drop_is_not_a_failure(
     assert spider.parsed == []
     assert spider.scheduler.stats.get("content_type_dropped") == 1
     assert spider.scheduler.stats.get("request_failed") == 0, "被白名单挡掉不该算失败"
+
+
+# ---- 渲染路径（render=True）------------------------------------------
+def test_render_path_also_honours_the_cap() -> None:
+    """`render=True` 不能成为 `MAX_RESPONSE_SIZE` 的后门。
+
+    渲染没有可以边读边停的字节流（内容是从浏览器里取的），只能事后判 ——
+    但仍然要判：否则加个 `render=True` 就绕过了上限。
+    这里直接测那个判断函数，因为跑真浏览器的用例带 `render` 标记、默认不跑。
+    """
+    from mineworker.network.downloader._common import check_size
+
+    check_size(b"x" * (CAP // 2), "http://e/ok")  # 不超限：什么都不该发生
+    with pytest.raises(ResponseTooLargeError, match="MAX_RESPONSE_SIZE"):
+        check_size(b"x" * (CAP * 2), "http://e/big")
+
+
+def test_render_cap_disabled_by_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mineworker.network.downloader._common import check_size
+
+    monkeypatch.setattr(setting, "MAX_RESPONSE_SIZE", 0)
+    check_size(b"x" * (CAP * 100), "http://e/huge")  # 不该抛
