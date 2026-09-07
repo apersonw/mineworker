@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-09-07
+
+退出时的数据完整性。**补上 0.10.2 兜底说法的漏洞** —— 那次声称永久性故障由
+`DUMP_UNFINISHED_ON_EXIT` 兜底，但那条路径恰好不会触发。
+
 ### 修复
 
 - **非中断退出时不 dump 未完成请求。** `AirScheduler._on_shutdown` 的 dump 卡在
