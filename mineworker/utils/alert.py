@@ -73,8 +73,15 @@ def build_notifiers() -> list[Notifier]:
 
 
 class AlertManager:
-    def __init__(self, stats: Stats, notifiers: list[Notifier] | None = None) -> None:
+    def __init__(
+        self,
+        stats: Stats,
+        notifiers: list[Notifier] | None = None,
+        dedup: Any = None,
+    ) -> None:
         self._stats = stats
+        #: 去重过滤器（可为 None，或没有容量概念的精确去重）—— 只用来读填充度
+        self._dedup = dedup
         self._notifiers = notifiers if notifiers is not None else build_notifiers()
         self._last_ok = 0
         self._last_progress = time.monotonic()
@@ -102,6 +109,32 @@ class AlertManager:
 
         if setting.WARNING_FAILED_COUNT and failed >= setting.WARNING_FAILED_COUNT:
             self._fire("failed_count", "失败请求过多", f"已失败 {failed} 个")
+
+        self._check_dedup_fill()
+
+    def _check_dedup_fill(self) -> None:
+        """布隆填满会**静默**地把新 URL 当成抓过的丢掉 —— 这是最该有告警的一类失效。
+
+        实测容量 3 倍时每 13 个新 URL 丢 1 个，5 倍时丢一半，而统计里只显示
+        「去重 N 条」，看上去完全正常。所以宁可早报。
+        """
+        rate = setting.DEDUP_WARN_FILL_RATE
+        if not rate or self._dedup is None:
+            return
+        # 精确去重没有容量概念，lite / 自定义过滤器也可能没有 —— 拿不到就跳过
+        count = getattr(self._dedup, "count", None)
+        capacity = getattr(self._dedup, "capacity", None)
+        if not isinstance(count, int) or not isinstance(capacity, int) or capacity <= 0:
+            return
+        if count < capacity * rate:
+            return
+        self._fire(
+            "dedup_fill",
+            "去重过滤器接近容量上限",
+            f"已插入 {count:,} / 容量 {capacity:,}。超容后新 URL 会被当成"
+            f"「已抓过」静默丢掉（实测 5 倍容量时丢一半）。"
+            f"请调大 DEDUP_INITIAL_CAPACITY 或改用精确去重",
+        )
 
     def _fire(self, key: str, title: str, message: str) -> None:
         now = time.monotonic()

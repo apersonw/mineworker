@@ -66,7 +66,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `ITEM_FILTER_ENABLE` | `True` | Item 级去重开关 |
 | `CSV_OUTPUT_DIR` | `"."` | CsvPipeline 输出目录 |
 | `DEDUP_FILTER` | `"memory"` | `memory`（布隆）\| `lite`（精确）\| `redis` \| `redis-set` |
-| `DEDUP_ERROR_RATE` | `1e-6` | 布隆误判率 |
+| `DEDUP_ERROR_RATE` | `1e-6` | 布隆单层误判率（分层后总上界为其 2 倍） |
+| `DEDUP_MAX_LAYERS` | `4` | 布隆最多几层。默认容量 ×15、内存 57MB，见[去重的容量](distributed.md#去重的容量) |
+| `DEDUP_WARN_FILL_RATE` | `0.8` | 填到这个比例就告警。**超容会静默丢 URL**，宁可早报 |
 | `MONGO_URI` / `MONGO_DB` | `localhost` / `mineworker` | |
 
 ## MySQL

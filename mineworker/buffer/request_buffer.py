@@ -32,6 +32,12 @@ class RequestBuffer(threading.Thread):
         self._stop_event = threading.Event()
 
     # ------------------------------------------------------------------
+
+    @property
+    def dedup(self) -> Filter:
+        """实际在用的去重过滤器 —— 构造时传进来的可能是 None，这里给出真正生效的那个。"""
+        return self._dedup
+
     def put(self, request: Request) -> None:
         with self._lock:
             self._pending.append(request)

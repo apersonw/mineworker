@@ -62,7 +62,7 @@ class BaseScheduler:
                 UserPoolMiddleware(self._user_pool, check_login=parser.check_login)
             )
             log.info("账号池已挂载：{}", type(self._user_pool).__name__)
-        self._alert = AlertManager(self.stats)
+        self._alert = AlertManager(self.stats, dedup=self._request_buffer.dedup)
         self._metrics: MetricsReporter | None = None
         self._workers: list[ParserWorker] = []
         self._stop_event = threading.Event()

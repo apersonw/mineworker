@@ -167,6 +167,16 @@ DEDUP_FILTER: str = "memory"
 DEDUP_TO_MD5: bool = True  # Dedup 直接传入原始值时是否先 md5
 DEDUP_ERROR_RATE: float = 1e-6
 DEDUP_INITIAL_CAPACITY: int = 1_000_000
+# 布隆填充到这个比例就告警。默认 0.8 是为了**在误判率变糟之前**通知你 ——
+# 实测容量 3 倍时就已经每 13 个新 URL 丢 1 个，等到 1.0 才报就太晚了
+DEDUP_WARN_FILL_RATE: float = 0.8
+# 布隆最多分几层。一层填满就加一层：容量 ×2、误判率 ×0.5，所以总误判率收敛到
+# 目标值的 2 倍以内。代价是内存 —— 基础容量 100 万时：
+#   1 层 = 100 万 / 3MB    4 层 = 1500 万 / 57MB
+#   6 层 = 6300 万 / 260MB  8 层 = 2.55 亿 / 1.1GB
+# 默认 4 层：容量 ×15 只花 57MB。**必须有顶** —— 无限加层就是把内存变成无界资源，
+# 那正是 v4.4 刚从下载路径上清掉的东西。到顶后退化成单层并沿用超容告警。
+DEDUP_MAX_LAYERS: int = 4
 
 # ---- MongoDB ----
 MONGO_URI: str = "mongodb://localhost:27017"
