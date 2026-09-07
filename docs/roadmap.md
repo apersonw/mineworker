@@ -146,6 +146,52 @@ pipeline 只是打包发送、**并不保证原子**，两个节点会同时把�
 压缩包一次到齐时解压器会一次性吐出全部内容，上限只能在那之后判定。
 它挡住的是「留下来」和 `.text` 的二次放大，挡不住那一次瞬时分配。
 
+### v4.6 —— BatchSpider 的并发正确性
+
+> **动因**：`BatchSpider` 的 master 互斥有一处**能永久破掉**的缺陷，
+> 而破掉之后紧跟着的就是任务被重复认领。
+>
+> **1. `_renew_lock` 是无条件 `SET`**，不校验锁还是不是自己的：
+>
+> 1. master A 的一次 tick 超过 `_LOCK_TTL`（60 秒），锁过期
+> 2. master B 用 `SET NX` **合法**拿到锁
+> 3. A 下一次续期把 key 覆盖成自己的 node_id，**把锁从 B 手里抢回来**
+> 4. A 和 B 从此互相覆盖 —— 互斥不是「偶尔失效」，是**一旦超时一次就永久破掉**
+>
+> 耐人寻味的是释放路径**本来就校验了持有者**（`__exit__` 里的 `get == node_id`），
+> 续期这边漏了。同一份代码的两半，一半对一半不对。
+>
+> **2. `claim_tasks` 是非原子的 SELECT 然后 UPDATE**：
+>
+> ```sql
+> SELECT * FROM task WHERE batch_status=0 LIMIT n;    -- 读
+> UPDATE task SET batch_status=1 WHERE id IN (...);   -- 写
+> ```
+>
+> 没有事务、没有 `FOR UPDATE`。真库实测（直接并发调用 store，6 个并发认领者）：
+> **200 个任务被认领 1200 次，每个都被领了 6 遍。**
+>
+> ⚠️ **准确说清曝露面**：正常单 master 部署下 `claim_tasks` 不会撞车 ——
+> 它只由 master 调用，而 master 有锁。上面那个 6 倍是直接压 store 测出来的，
+> 不是框架日常路径。真正会触发它的是第 1 条：**锁一旦被抢回来，两个 master
+> 同时认领，同一批 URL 就会被抓两遍。** 另外 `BatchStore.claim_tasks` 是公开接口，
+> 自己写 master 的用户直接暴露在这个竞态下。
+>
+> **3. 测试盲区**：`MysqlBatchStore` **从没碰过真数据库** —— 测的是 SQL 字符串形状
+> （``assert "WHERE `batch_status`=0 LIMIT %s" in ...``），那只验证了「我写出了我想写的
+> 字符串」。这和 v3.0 之前的 `MysqlPipeline` 是同一个缺口。
+
+| 阶段 | 内容 | 关键张力 |
+|---|---|---|
+| ~~**A · 真库测试，先写出会红的用例**~~ ✅ | `MysqlBatchStore` 接真 MySQL（照 v3.0 的 `mysql_db` 夹具范式），并发认领用例先在现有实现上转红 | 先红再绿：不然改完也不知道到底修没修掉 |
+| ~~**B · 原子认领 + 修好 master 锁**~~ ✅ | `MysqlDB` 加 `transaction()`（当前是 autocommit + 每次调用各借一条连接，所以连 `SELECT ... FOR UPDATE` 都锁不住）；认领改成一个事务里 `SELECT ... FOR UPDATE` + `UPDATE`；续期与释放改成原子的「是我的才操作」，丢锁的 master 直接退出 | 不加 claim 列 —— 那是破坏性的表结构变更，已有用户的任务表要迁移。`FOR UPDATE` 不需要改表 |
+| ~~**C · 端到端验证**~~ ✅ | 真 MySQL + 真 Redis + master / worker **分进程**跑一轮，判据取自 HTTP 靶子的命中次数 | v4.2 起一直用的做法：地面真相要在框架外部 |
+
+**验证**：并发认领用例把 `FOR UPDATE` 去掉即转红；锁续期用例在旧实现上转红。
+端到端用例**没有**跟着旧实现红 —— 因为它只有一个 master，这恰好印证了上面
+对曝露面的判断，也说明它测的是别的东西（分进程下的不重复、不遗漏）。
+
+
 ## 设计约束
 
 - 与 feapder **API 心智兼容**，不追求代码级兼容

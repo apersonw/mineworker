@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import fakeredis
@@ -291,17 +292,57 @@ class FakeDB:
     def close(self) -> None:
         self.calls.append(("close", "", None))
 
+    # 认领改成了「一个事务里 SELECT ... FOR UPDATE + UPDATE」，假 DB 也要跟上
+    @contextmanager
+    def transaction(self) -> Iterator[FakeDB]:
+        self.calls.append(("begin", "", None))
+        yield self
+        self.calls.append(("commit", "", None))
 
-def test_mysql_store_claim_selects_then_updates_by_id() -> None:
+    @contextmanager
+    def cursor(self) -> Iterator[FakeCursor]:
+        yield FakeCursor(self)
+
+
+class FakeCursor:
+    def __init__(self, db: FakeDB) -> None:
+        self._db = db
+        self._rows: list[dict[str, Any]] = []
+
+    def execute(self, sql: str, args: Any = None) -> None:
+        self._db.calls.append(("execute", sql, args))
+        self._rows = []
+        for sub, rows in self._db.query_returns.items():
+            if sub in sql:
+                self._rows = rows
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+def test_mysql_store_claim_locks_rows_in_one_transaction() -> None:
+    """认领必须在**一个事务**里、且带 `FOR UPDATE`。
+
+    这只是个快速回归闸：假 DB 验证不了数据库到底会不会锁行。真正的保证
+    由 `tests/test_batch_store_integration.py` 在真 MySQL 上给出 ——
+    这个用例存在的意义仅仅是「有人把 FOR UPDATE 删了能立刻发现」，
+    不需要起数据库。
+
+    （它的上一版断言的恰恰是**有 bug 的那个行为**：「SELECT 然后 UPDATE」两条
+    独立语句。SQL 字符串对了不等于并发下对，这是第二次栽在同一件事上了。）
+    """
     db = FakeDB()
     db.query_returns["SELECT * FROM `crawl_task`"] = [{"id": 5}, {"id": 6}]
     rows = MysqlBatchStore("crawl_task", db=db).claim_tasks(10)
 
     assert rows == [{"id": 5}, {"id": 6}]
-    assert [c[0] for c in db.calls] == ["query", "execute"]
-    assert "WHERE `batch_status`=0 LIMIT %s" in db.calls[0][1]
-    assert "SET `batch_status`=2 WHERE `id` IN (%s, %s)" in db.calls[1][1]
-    assert db.calls[1][2] == (5, 6)
+    kinds = [c[0] for c in db.calls]
+    assert kinds == ["begin", "execute", "execute", "commit"], f"认领不在一个事务里：{kinds}"
+    select_sql = db.calls[1][1]
+    assert "FOR UPDATE" in select_sql, "SELECT 没有锁行，多个 worker 会领到同一批任务"
+    assert "WHERE `batch_status`=0 LIMIT %s" in select_sql
+    assert "SET `batch_status`=2 WHERE `id` IN (%s, %s)" in db.calls[2][1]
+    assert db.calls[2][2] == (5, 6)
 
 
 def test_mysql_store_count_tasks_aggregates_by_state() -> None:
@@ -343,3 +384,61 @@ def test_mysql_store_reset_all_and_finish() -> None:
     assert db.calls[-1][1] == "UPDATE `t` SET `batch_status`=0"
     store.finish_batch(3)
     assert "SET `is_done`=1" in db.calls[-1][1] and db.calls[-1][2] == (3,)
+
+
+# ====================================================================== master 锁的续期
+def test_renew_does_not_steal_back_an_expired_lock(fake_redis: Any) -> None:
+    """续期必须校验「锁还是不是我的」。
+
+    ``_renew_lock`` 原来是无条件 SET —— 于是：
+
+    1. master A 一次 tick 超过锁的 TTL，锁过期
+    2. master B 用 SET NX 合法拿到锁
+    3. **A 下一次续期把 key 覆盖成自己的 node_id，把锁从 B 手里抢回来**
+    4. A 和 B 都认为自己持有锁，同时开始认领任务
+
+    也就是说互斥不是「偶尔失效」，而是一旦超时一次就**永久破掉**（两个 master
+    此后互相覆盖）。这正是 `claim_tasks` 的竞态在生产里被触发的途径。
+
+    释放路径本来就校验了持有者（`__exit__` 里的 `get == node_id`），
+    续期这边漏了 —— 同一份代码里的两半，一半对一半不对。
+    """
+    from mineworker.core.batch_monitor import BatchMonitor
+
+    monitor = BatchMonitor(
+        store=MemoryBatchStore([{"id": 1}]),
+        redis=fake_redis,
+        ns="mineworker:LOCK",
+        batch_interval=1.0,
+        push_limit=10,
+        monitor_interval=0.01,
+    )
+    key = "mineworker:LOCK:batch_monitor_lock"
+
+    fake_redis.set(key, "master-B", ex=60)  # B 是当前合法持有者
+
+    # 丢了锁的 master 必须**停下来**，而不是继续认领任务
+    with pytest.raises(SpiderError, match="易主"):
+        monitor._renew_lock()
+
+    assert fake_redis.get(key) == "master-B", "续期把别人的锁抢过来了 —— 互斥形同虚设"
+
+
+def test_renew_keeps_the_lock_when_we_still_hold_it(fake_redis: Any) -> None:
+    from mineworker.core.batch_monitor import BatchMonitor
+
+    monitor = BatchMonitor(
+        store=MemoryBatchStore([{"id": 1}]),
+        redis=fake_redis,
+        ns="mineworker:LOCK2",
+        batch_interval=1.0,
+        push_limit=10,
+        monitor_interval=0.01,
+    )
+    key = "mineworker:LOCK2:batch_monitor_lock"
+    fake_redis.set(key, monitor._node_id, ex=1)
+
+    monitor._renew_lock()
+
+    assert fake_redis.get(key) == monitor._node_id
+    assert fake_redis.ttl(key) > 1, "续期没有把 TTL 推回去"

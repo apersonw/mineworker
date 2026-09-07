@@ -5,6 +5,40 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **`BatchSpider` 的 master 互斥一旦超时一次就永久破掉。** `_renew_lock` 是无条件
+  `SET`，不校验锁还是不是自己的：master A 的一次 tick 超过锁 TTL（60 秒）→ 锁过期 →
+  master B 用 `SET NX` 合法拿到 → **A 下次续期把 key 覆盖回自己的 node_id，把锁
+  抢了回来**。此后两个 master 互相覆盖，同时认领任务，同一批 URL 被抓两遍。
+
+    现在续期与释放都是原子的「是我的才操作」（Lua 比对 node_id），
+    续期发现锁易主就让本节点退出，不再认领任务。
+
+    （释放路径本来就校验了持有者，只是那边也是非原子的 GET-then-DEL，一并收拾。）
+
+- **`MysqlBatchStore.claim_tasks` 是非原子的「SELECT 然后 UPDATE」。**
+  没有事务、没有 `FOR UPDATE`，多个认领者会 SELECT 到同一批行。真库实测
+  （6 个并发认领者）：200 个任务被认领 1200 次，每个都被领了 6 遍。
+
+    现在在一个事务里 `SELECT ... FOR UPDATE` + `UPDATE`。为此给 `MysqlDB` 加了
+    `transaction()` —— 它此前是 autocommit 且每次调用各借一条连接，所以就算写了
+    `FOR UPDATE` 也锁不住（两条语句在两个事务里，行锁早放掉了）。
+    `MemoryBatchStore.claim_tasks` 同样补了锁。
+
+    没有加「认领令牌」列：那是破坏性的表结构变更，修 bug 不该顺带要求所有人迁移数据。
+
+    正常单 master 部署下这个竞态不会撞车（`claim_tasks` 只由持锁的 master 调用）——
+    真正会触发它的是上面那条锁缺陷。但 `BatchStore.claim_tasks` 是公开接口，
+    自己写 master 的用户直接暴露在其中。
+
+### 测试
+
+- `MysqlBatchStore` 此前**从没碰过真数据库** —— 测的是 SQL 字符串形状，
+  那只验证了「我写出了我想写的字符串」。现在接真 MySQL，并新增 master / worker
+  **分进程**的端到端用例（真 MySQL 任务表 + 真 Redis 队列，判据取自 HTTP 靶子的
+  命中次数）。这和 v3.0 给 `MysqlPipeline` 补真库测试是同一个缺口。
+
 ## [0.10.0] - 2026-09-07
 
 去重的规模边界。**抓取量可能超过 100 万 URL 的用户建议尽快升级** ——

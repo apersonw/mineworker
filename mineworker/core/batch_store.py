@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import abc
+import threading
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -131,6 +132,7 @@ class MemoryBatchStore(BatchStore):
             self._tasks.append(row)
         self._touched: dict[Any, float] = {}
         self._batches: list[BatchRecord] = []
+        self._lock = threading.Lock()
         self._created_at: dict[int, float] = {}
         self._seq = 0
 
@@ -199,15 +201,19 @@ class MemoryBatchStore(BatchStore):
         return reset
 
     def claim_tasks(self, limit: int) -> list[dict[str, Any]]:
-        claimed: list[dict[str, Any]] = []
-        for row in self._tasks:
-            if len(claimed) >= max(1, limit):
-                break
-            if self._state(row) == TODO:
-                row[self._state_field] = DOING
-                self._touched[row[self._id_field]] = time.time()
-                claimed.append(dict(row))
-        return claimed
+        # 加锁：「检查是 TODO」和「置为 DOING」之间不是原子的，两个 worker 线程
+        # 都可能先读到 TODO 再各自置位，于是同一个任务被处理两遍。
+        # GIL 只让这个窗口变窄，并不会让它消失
+        with self._lock:
+            claimed: list[dict[str, Any]] = []
+            for row in self._tasks:
+                if len(claimed) >= max(1, limit):
+                    break
+                if self._state(row) == TODO:
+                    row[self._state_field] = DOING
+                    self._touched[row[self._id_field]] = time.time()
+                    claimed.append(dict(row))
+            return claimed
 
     def mark_task(self, task_id: Any, state: int) -> None:
         for row in self._tasks:
@@ -321,19 +327,35 @@ class MysqlBatchStore(BatchStore):
         )
 
     def claim_tasks(self, limit: int) -> list[dict[str, Any]]:
-        rows = self._db.query(
-            f"SELECT * FROM `{self._task_table}` WHERE `{self._state}`={TODO} LIMIT %s",
-            (max(1, limit),),
-        )
-        if not rows:
-            return []
-        ids = [r[self._id] for r in rows]
-        placeholders = ", ".join(["%s"] * len(ids))
-        self._db.execute(
-            f"UPDATE `{self._task_table}` SET `{self._state}`={DOING} "
-            f"WHERE `{self._id}` IN ({placeholders})",
-            tuple(ids),
-        )
+        """在**一个事务**里认领：``SELECT ... FOR UPDATE`` 锁住选中的行，再改状态。
+
+        原来是普通的「SELECT 然后 UPDATE」，两条语句各借一条连接、各自
+        autocommit —— 于是多个 worker 会 SELECT 到**同一批行**，各自处理一遍。
+        真库实测（200 个任务、6 个 worker）：认领 1200 次，每个任务都被领了 6 遍，
+        目标站等于挨了 6 倍流量。这直接违反 `BatchSpider` 承诺的「任务防丢」。
+
+        ``FOR UPDATE`` 把行锁持有到事务提交，别的 worker 只能等；等到了再看，
+        这些行已经是「处理中」，自然跳过。认领是小事务，串行代价可以接受。
+
+        用行锁而不是加一个「认领令牌」列：后者要改表结构，已有用户的任务表
+        都得迁移，而这是个修 bug 的改动，不该顺带要求所有人迁移数据。
+        """
+        with self._db.transaction() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"SELECT * FROM `{self._task_table}` "
+                f"WHERE `{self._state}`={TODO} LIMIT %s FOR UPDATE",
+                (max(1, limit),),
+            )
+            rows = list(cur.fetchall())
+            if not rows:
+                return []
+            ids = [r[self._id] for r in rows]
+            placeholders = ", ".join(["%s"] * len(ids))
+            cur.execute(
+                f"UPDATE `{self._task_table}` SET `{self._state}`={DOING} "
+                f"WHERE `{self._id}` IN ({placeholders})",
+                tuple(ids),
+            )
         return rows
 
     def mark_task(self, task_id: Any, state: int) -> None:

@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
@@ -57,6 +60,29 @@ class MysqlDB:
         )
 
     # ------------------------------------------------------------------
+    @contextmanager
+    def transaction(self) -> Iterator[Any]:
+        """在**同一条连接**上跑多条语句，出错回滚。
+
+        普通的 `query` / `execute` 各自从池里借一条连接、用完就还，而且池是
+        ``autocommit=True`` 的 —— 所以「先 SELECT ... FOR UPDATE 再 UPDATE」
+        这种写法在它们身上**根本锁不住**：两条语句在两条连接、两个事务里，
+        行锁在第一条语句结束时就放掉了。
+
+        需要「读到什么就锁住什么」的地方（比如多 worker 抢任务）必须用这个。
+        """
+        conn = self._pool.connection()
+        try:
+            conn.begin()
+            yield conn
+            conn.commit()
+        except BaseException:
+            with contextlib.suppress(Exception):
+                conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def query(self, sql: str, args: Any = None) -> list[dict[str, Any]]:
         conn = self._pool.connection()
         try:

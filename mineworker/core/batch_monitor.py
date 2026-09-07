@@ -30,6 +30,22 @@ log = get_logger("batch")
 
 _LOCK_TTL = 60
 
+#: 是我的才续期。返回 1 = 续上了，0 = 锁已经不是自己的
+_RENEW_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+"""
+
+#: 是我的才删
+_RELEASE_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
 
 class BatchMonitor:
     def __init__(
@@ -145,7 +161,21 @@ class BatchMonitor:
         return _LockGuard(self._redis, self._lock_key, self._node_id)
 
     def _renew_lock(self) -> None:
-        self._redis.set(self._lock_key, self._node_id, ex=_LOCK_TTL)
+        """只在锁**还是自己的**时候续期。
+
+        原来是无条件 `SET` —— 于是一旦本节点的一次 tick 超过 `_LOCK_TTL`：
+        锁过期 → 另一个 master 用 `SET NX` 合法拿到 → **本节点下次续期又把它
+        覆盖回来**。两个 master 从此互相覆盖，互斥不是「偶尔失效」而是**永久破掉**，
+        而两个 master 同时认领任务就意味着同一批 URL 被抓两遍。
+
+        校验和续期必须原子完成：先 GET 再 SET 之间锁可能已经易主。
+        （释放路径本来就校验了持有者，只是那边也是非原子的 GET-then-DEL，一并收拾。）
+        """
+        if not self._redis.register_script(_RENEW_LUA)(
+            keys=[self._lock_key], args=[self._node_id, _LOCK_TTL]
+        ):
+            # 锁已经不是自己的了：另一个 master 接管了，本节点不该再认领任务
+            raise SpiderError(f"BatchSpider monitor 锁已易主（{self._lock_key}），本节点退出")
 
 
 class _LockGuard:
@@ -159,7 +189,8 @@ class _LockGuard:
 
     def __exit__(self, *exc: object) -> None:
         try:
-            if self._redis.get(self._key) == self._node_id:
-                self._redis.delete(self._key)
+            # 原子的「是我的才删」：GET 之后 DEL 之前锁可能已经过期并被别人拿走，
+            # 那样就会删掉别人的锁
+            self._redis.register_script(_RELEASE_LUA)(keys=[self._key], args=[self._node_id])
         except Exception:
             log.debug("释放 monitor 锁失败", exc_info=True)

@@ -55,6 +55,16 @@ def redis_url() -> str:
 
 
 @pytest.fixture
+def mysql_url() -> str:
+    """真 MySQL 的连接串。
+
+    并发用例需要**每个 worker 一条独立连接** —— 共用一个 `MysqlDB` 实例
+    就没有真正的并发可言，也就测不出认领的竞态。
+    """
+    return _db_url("MINEWORKER_TEST_MYSQL_URL")
+
+
+@pytest.fixture
 def mysql_db() -> Iterator[Any]:
     from mineworker.db.mysqldb import MysqlDB
 
