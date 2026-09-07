@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 from mineworker import setting
-from mineworker.dedup.bloom_filter import MemoryBloomFilter
+from mineworker.dedup.bloom_filter import MemoryBloomFilter, ScalableBloomFilter
 from mineworker.dedup.lite_filter import LiteFilter
 from mineworker.exceptions import ConfigError
 from mineworker.utils import tools
@@ -48,6 +48,8 @@ def _make_filter(
     if filter_type == "lite":
         return LiteFilter()
     if filter_type in {"memory", "bloom"}:
+        if setting.DEDUP_MAX_LAYERS > 1:
+            return ScalableBloomFilter(capacity, error_rate, max_layers=setting.DEDUP_MAX_LAYERS)
         return MemoryBloomFilter(capacity, error_rate)
     if filter_type in {"redis", "redis-bloom"}:
         from mineworker.dedup.redis_filter import RedisBloomFilter
@@ -93,6 +95,18 @@ class Dedup:
 
     def get(self, value: Any) -> bool:
         return self._key(value) in self._filter
+
+    @property
+    def count(self) -> int | None:
+        """已插入的指纹数；底层过滤器不记数就返回 None。"""
+        n = getattr(self._filter, "count", None)
+        return n if isinstance(n, int) else None
+
+    @property
+    def capacity(self) -> int | None:
+        """容量上限；精确去重等没有这个概念的返回 None。"""
+        c = getattr(self._filter, "capacity", None)
+        return c if isinstance(c, int) else None
 
     def __contains__(self, value: Any) -> bool:
         return self.get(value)

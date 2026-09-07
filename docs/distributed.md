@@ -70,13 +70,77 @@ HEARTBEAT_STALE = 15.0               # 超过这个秒数没心跳的节点视�
 SPIDER_KEEP_ALIVE = False
 ```
 
+## 去重的容量
+
+布隆过滤器是**固定容量**的，超容后误判率会急剧升高 —— 而在去重里，
+「误判」意味着**一个从没抓过的 URL 被当成「已抓过」静默丢掉**。
+
+实测（基础容量 10 万、目标误判率 `1e-6`，单层）：
+
+| 已插入 | 倍数 | 误判率 | 实际后果 |
+|---|---|---|---|
+| 10 万 | 1× | 0% | 正常 |
+| 30 万 | 3× | 7.2% | 每 13 个新 URL 丢 1 个 |
+| 50 万 | 5× | **53.7%** | **一半的站点抓不到** |
+| 80 万 | 8× | 92.8% | 基本不再发现新页面 |
+
+所以布隆是**分层**的：一层填满就加一层，容量 ×2、误判率 ×0.5 ——
+后者是关键，各层误判率成等比数列，**总误判率收敛到目标值的 2 倍以内**，
+加多少层都不会失控。
+
+```python
+DEDUP_INITIAL_CAPACITY = 1_000_000   # 第一层的容量
+DEDUP_MAX_LAYERS = 4                 # 最多几层
+DEDUP_WARN_FILL_RATE = 0.8           # 填到八成就告警
+```
+
+代价是内存：
+
+| 层数 | 累计容量 | 累计内存 | 总误判率上界 |
+|---|---|---|---|
+| 1 | 100 万 | 3MB | 1.0e-6 |
+| **4（默认）** | **1500 万** | **57MB** | 1.88e-6 |
+| 6 | 6300 万 | 260MB | 1.97e-6 |
+| 8 | 2.55 亿 | 1.1GB | 1.99e-6 |
+
+!!! warning "层数必须有顶"
+    `DEDUP_MAX_LAYERS` 不是可选的保险 —— 让层数无限长下去就是把 Redis 内存
+    变成一个**无界资源**，而那正是[资源边界](spider.md#资源边界)刚从下载路径上
+    清掉的东西。到顶之后行为退化成单层布隆，并触发下面的告警。
+
+    查询要遍历所有层，层数越多越慢，这是不宜开太大的另一个原因。
+
+### 填满了会告警
+
+填到 `DEDUP_WARN_FILL_RATE`（默认八成）就走[告警通道](observability.md)（飞书 / 邮件），
+到顶后再写还会额外记一条日志。
+
+这条告警是有来由的：在它之前**完全没有任何信号** —— 计数一直有记录但没人读，
+统计里只显示「去重 N 条」，爬虫只是「提前结束了」或「少抓了很多」，查不出原因。
+
+### 不想要误判就用精确去重
+
+```python
+DEDUP_FILTER = "redis-set"    # 一个 Redis SET，成员即指纹
+```
+
+不会误判，代价是内存随抓取量**线性**增长。这是取舍，不是「布隆坏了就换它」。
+
+!!! note "升级不会让已有去重状态失效"
+    第 0 层沿用原来的 key（`{name}:dedup:bloom`），所以从旧版本升上来的
+    断点续爬不会从头再抓一遍。新增的层是 `:1`、`:2` ……
+
 ## 重新注入种子
 
 想让爬虫重新从头跑（比如换了一批种子）：删掉种子锁和队列。
 
 ```bash
 redis-cli DEL mineworker:NewsSpider:lock:seed mineworker:NewsSpider:z_requests
-redis-cli DEL mineworker:NewsSpider:dedup:bloom      # 顺便清去重
+redis-cli DEL mineworker:NewsSpider:dedup:bloom \
+  mineworker:NewsSpider:dedup:bloom:1 \
+  mineworker:NewsSpider:dedup:bloom:2 \
+  mineworker:NewsSpider:dedup:bloom:3 \
+  mineworker:NewsSpider:dedup:bloom:count      # 顺便清去重（含各分层与计数）
 ```
 
 ---

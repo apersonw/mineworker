@@ -57,7 +57,9 @@ dev = [
     "respx>=0.21",
     "pytest-httpserver>=1.0",
     "mongomock>=4.1",
-    "fakeredis>=2.20",
+    # [lua] 拉 lupa：Redis 布隆的置位+计数用 Lua 保证原子，没有它 fakeredis
+    # 会直接 unknown command 'evalsha'，这条路径就悄悄没被测到
+    "fakeredis[lua]>=2.20",
     "ruff>=0.6",
     "mypy>=1.11",
     "pre-commit>=3.7",
