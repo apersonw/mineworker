@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from mineworker import setting
 from mineworker.exceptions import RequestError
+from mineworker.network.downloader._common import check_size
 from mineworker.network.downloader.base import Downloader
 from mineworker.network.response import Response
 from mineworker.network.user_agent import get_random_user_agent
@@ -129,6 +130,12 @@ class _RenderWorker(threading.Thread):
                 request.render_script(page)
 
             html = page.content()
+            body = html.encode("utf-8")
+            # 渲染这条路走不了流式（内容是从浏览器里取的，没有可以边读边停的字节流），
+            # 但上限还是要认：否则 render=True 就成了 MAX_RESPONSE_SIZE 的一个后门。
+            # 注意此时浏览器进程早已把整页装下了 —— 这一刀挡的是「把巨大的字符串
+            # 交给用户的 parse()」，挡不住浏览器那边的内存
+            check_size(body, page.url)
             cookies = {c["name"]: c["value"] for c in self._context.cookies()}
             status = nav.status if nav is not None else 200
             headers = dict(nav.headers) if nav is not None else {}
@@ -136,7 +143,7 @@ class _RenderWorker(threading.Thread):
             return Response(
                 url=page.url,
                 status_code=status,
-                content=html.encode("utf-8"),
+                content=body,
                 headers=headers,
                 cookies=cookies,
                 request=request,

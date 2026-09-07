@@ -130,6 +130,19 @@ def check_content_type(headers: Any, url: str) -> None:
         raise ContentTypeRejectedError(f"Content-Type {ctype!r} 不在白名单：{url}")
 
 
+def check_size(body: bytes, url: str) -> None:
+    """对**已经拿到**的完整 body 判上限（渲染这条路用）。
+
+    渲染没有可以边读边停的字节流 —— 内容是从浏览器里取的，只能事后判。
+    但仍然要判：否则 ``render=True`` 就成了 `MAX_RESPONSE_SIZE` 的一个后门。
+    """
+    limit = setting.MAX_RESPONSE_SIZE
+    if limit > 0 and len(body) > limit:
+        raise ResponseTooLargeError(
+            f"响应体 {len(body)} 字节，超过 MAX_RESPONSE_SIZE={limit}：{url}"
+        )
+
+
 def read_capped(chunks: Iterable[bytes], url: str, declared: str | None = None) -> bytes:
     """按 `MAX_RESPONSE_SIZE` 边读边计数，超限立刻抛错（调用方退出上下文即断开）。
 
