@@ -53,8 +53,11 @@ class BaseScheduler:
         self.stats = Stats()
         self._task_queue = self._make_task_queue()
         self._request_buffer = RequestBuffer(self._task_queue, self.stats, dedup=self._make_dedup())
-        self._item_buffer = ItemBuffer(self.stats, handler=item_handler, pipelines=pipelines)
+        # collector 要先建：ItemBuffer 落库之后要回调它销账
         self._collector = Collector(self._task_queue)
+        self._item_buffer = ItemBuffer(
+            self.stats, handler=item_handler, pipelines=pipelines, ack=self._collector.done
+        )
         self._middleware = MiddlewareManager(setting.DOWNLOADER_MIDDLEWARES)
         self._user_pool = parser.user_pool()
         if self._user_pool is not None:
