@@ -85,6 +85,17 @@ DONE_CHECK_INTERVAL: float = 0.5  # 每次复查间隔（秒）
 #
 # 只有「一个任务都没见过」的节点付这个等待成本；拿到过活之后就按原规则判定。
 SPIDER_STARTUP_GRACE: float = 10.0
+
+# 任务租约：节点从 Redis 领走任务后，最多允许它「在途」这么久。
+#
+# 队列用 zpopmin —— 取走即删，任务进了某个节点的内存后 Redis 里就不存在了。
+# 进程被 SIGKILL（OOM Killer / 断电 / docker kill）硬杀时，优雅停止与退出落盘
+# 都轮不到执行，这些任务就随进程消失。实测 24 个任务被硬杀后只剩 5 个。
+#
+# 租约到期后任意节点都可以把它放回队列。**代价是「至少一次」语义**：节点只是卡住
+# （长 GC、慢下载）而非死了的话，同一个任务会被处理两遍 —— 靠请求去重挡重复。
+# 设 0 关闭租约（回到取走即删的老行为）。
+SPIDER_TASK_LEASE: float = 600.0
 DUMP_UNFINISHED_ON_EXIT: bool = True  # 中断退出时把未完成请求 dump 到 FAILED_REQUEST_PATH
 
 # ---- 请求 ----

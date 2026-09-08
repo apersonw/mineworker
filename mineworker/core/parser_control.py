@@ -80,6 +80,9 @@ class ParserWorker(threading.Thread):
             except Exception:
                 log.exception("worker 未捕获异常")
             finally:
+                # 放在 finally 里：处理过程中抛什么异常都要销账，否则这条任务会挂在
+                # 在途表里直到租约到期被重抓一遍
+                self._collector.done(request)
                 self.busy = False
 
     # ------------------------------------------------------------------

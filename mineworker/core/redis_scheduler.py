@@ -105,7 +105,18 @@ class RedisScheduler(BaseScheduler):
             return False
         if self._in_startup_grace():
             return False
-        return self._local_idle() and self._task_queue.empty() and self._all_nodes_idle()
+        # 顺手回收租约到期的任务：结束检测本来就在周期性跑，不必另起线程。
+        # 放在判定**之前**很关键 —— 否则「队列空了」会先成立、爬虫先退出，
+        # 而那些被硬杀节点领走的任务还挂在在途表里没人捡
+        if self._task_queue.reclaim_expired():
+            return False
+        if not self._local_idle() or not self._task_queue.empty():
+            return False
+        # 还有任务在别的节点手里没销账 —— 它们可能正在被处理，也可能属于一个
+        # 已经死掉的节点。不能就此收工：租约到期后它们要被重新抓一遍
+        if self._task_queue.inflight_count() > 0:
+            return False
+        return self._all_nodes_idle()
 
     def _in_startup_grace(self) -> bool:
         """本节点还在启动宽限期内、且**一个任务都没见过**。
@@ -165,6 +176,10 @@ class RedisScheduler(BaseScheduler):
             request.filter_repeat = False
             try:
                 self._task_queue.put(request)
+                # 推回队列之后要销掉旧租约，否则这条任务同时躺在队列和在途表里：
+                # 别的节点抓完队列后 inflight_count() 仍大于 0，会一直不肯收工。
+                # 顺序不能反 —— 先销账再入队的话，中间崩掉任务就两头都不在了
+                self._task_queue.done(request)
             except Exception:
                 # 这个函数**恰恰是在「Redis 出问题」时被调用的** —— 推不回去就落盘，
                 # 否则剩下的请求静默消失：它们既不在队列里、也不在缓冲区里了

@@ -70,6 +70,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `CSV_OUTPUT_DIR` | `"."` | CsvPipeline 输出目录 |
 | `DEDUP_FILTER` | `"memory"` | `memory`（布隆）\| `lite`（精确）\| `redis` \| `redis-set` |
 | `DEDUP_ERROR_RATE` | `1e-6` | 布隆单层误判率（分层后总上界为其 2 倍） |
+| `SPIDER_TASK_LEASE` | `600.0` | 任务租约（秒）。节点被硬杀时靠它回收，代价是「至少一次」语义；`0` = 关闭。见[节点被硬杀之后](distributed.md#节点被硬杀之后) |
 | `SPIDER_STARTUP_GRACE` | `10.0` | 启动宽限（秒）：没拿到过任务的节点在此期间不判定结束。防止多节点同启时 N-1 个立刻退出，见[多节点同时启动](distributed.md#多节点同时启动) |
 | `DEDUP_MAX_LAYERS` | `4` | 布隆最多几层。默认容量 ×15、内存 57MB，见[去重的容量](distributed.md#去重的容量) |
 | `DEDUP_WARN_FILL_RATE` | `0.8` | 填到这个比例就告警。**超容会静默丢 URL**，宁可早报 |

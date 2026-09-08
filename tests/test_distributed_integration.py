@@ -90,6 +90,7 @@ def _run_node(
     keep: float = 0.0,
     delay: float = 0.0,
     global_throttle: bool = False,
+    lease: float | None = None,
 ) -> None:
     """一个「节点」：独立进程里跑一个 Spider。
 
@@ -118,6 +119,8 @@ def _run_node(
     # 抖动会让间隔在 ±50% 浮动，测出来的最小间隔就没法和配置值对账了
     setting.RANDOMIZE_DOWNLOAD_DELAY = False
     setting.GLOBAL_THROTTLE = global_throttle
+    if lease is not None:
+        setting.SPIDER_TASK_LEASE = lease
     log.configure()
 
     class NodeSpider(mw.Spider):
@@ -451,3 +454,50 @@ def test_node_waits_when_another_is_still_seeding(httpserver: HTTPServer, clean_
         "线上表现为：配 N 个 worker，实际只有 1 个在干活"
     )
     assert seen_pages == PAGES, f"漏抓：只见到 {seen_pages}/{PAGES}"
+
+
+# ---- 硬杀之后的任务恢复（租约）---------------------------------------
+def test_sigkilled_node_tasks_are_reclaimed(httpserver: HTTPServer, clean_redis: str) -> None:
+    """节点被 **SIGKILL** 硬杀后，它领走的任务必须能被别人捡回来。
+
+    这是优雅停止（0.8.1）与退出落盘（0.10.3）**结构上覆盖不到**的场景 ——
+    那两条都要求进程还活着，而 OOM Killer / 断电 / `docker kill` 不给这个机会。
+
+    队列用 `zpopmin`：取走即删。任务进了某个节点的内存后 Redis 里就不存在了，
+    进程一没，它们就随之消失。修复前实测：24 个任务硬杀后只剩 5 个。
+
+    判据取自 HTTP 靶子：**每个页面恰好被抓一次**。
+    """
+    import redis as redis_lib
+
+    key = f"kill{os.getpid()}"
+    with mp.Manager() as mgr:
+        hits = mgr.list()
+        # 慢靶子：保证被杀那一刻，本地缓冲里确实压着已领走的任务
+        _serve(httpserver, hits, page_delay=0.2)
+        url = httpserver.url_for("/seed")
+
+        # 租约是**部署级**设置：在途任务的到期时刻由领走它的那个节点写下，
+        # 所以第一个节点也得用短租约，否则要等它写的 600 秒默认值到期
+        first = mp.Process(
+            target=_run_node, args=(url, clean_redis, key), kwargs={"lease": 2.0}, daemon=False
+        )
+        first.start()
+        time.sleep(1.2)
+        os.kill(first.pid, signal.SIGKILL)  # 不给任何清理机会
+        first.join(timeout=30)
+
+        client = redis_lib.from_url(clean_redis, decode_responses=True)
+        stranded = client.zcard(f"mineworker:{key}:z_inflight")
+        assert stranded > 0, "被硬杀的节点没有留下在途任务，这个用例就没验到东西"
+        # 把租约调短，让第二个节点能在测试时限内回收
+        second = mp.Process(
+            target=_run_node, args=(url, clean_redis, key), kwargs={"lease": 2.0}, daemon=False
+        )
+        second.start()
+        _join_all([second])
+        counted = Counter(list(hits))
+        client.close()
+
+    pages = {p: c for p, c in counted.items() if p.startswith("/p/")}
+    assert len(pages) == PAGES, f"漏抓：只见到 {len(pages)}/{PAGES} —— 被硬杀节点领走的任务没能回收"
