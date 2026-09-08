@@ -138,9 +138,15 @@ def test_retry_items_keeps_still_failing(tmp_path: Path, monkeypatch: pytest.Mon
     assert json.loads(dump.read_text(encoding="utf-8")) == {"table": "t", "data": {"k": 1}}
 
 
-def test_retry_requests_redownloads(
+def test_retry_requests_probes_without_discarding(
     httpserver: HTTPServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`retry --requests` 是**探活**，不是恢复 —— 所以一条记录都不删。
+
+    它只重新下载看状态码，不跑回调、不产出 item、不入库。早先的版本会把探到可达的
+    记录删掉，于是「报告恢复 1、库里 0 行、唯一副本没了」。
+    真要把数据抓回来，用 `RETRY_FAILED_ON_START`。
+    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(setting, "RANDOM_USER_AGENT", False)
     httpserver.expect_request("/ok").respond_with_data("ok")
@@ -153,9 +159,10 @@ def test_retry_requests_redownloads(
         encoding="utf-8",
     )
 
-    assert retry_requests() == (1, 1)
-    assert "down" in dump.read_text(encoding="utf-8")
-    assert "/ok" not in dump.read_text(encoding="utf-8")
+    assert retry_requests() == (1, 1)  # 1 条可达，1 条仍不可达
+    text = dump.read_text(encoding="utf-8")
+    assert "down" in text
+    assert "/ok" in text, "探到可达就把记录删了 —— 那是唯一副本，而数据并没有回来"
 
 
 def test_retry_noop_when_no_dump(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

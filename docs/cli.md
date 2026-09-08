@@ -33,7 +33,7 @@ mineworker shell https://spa.example.com --render
 
 ```bash
 mineworker retry --items       # 重放 failed_items.jsonl 到当前 ITEM_PIPELINES
-mineworker retry --requests    # 重新下载 failed_requests.jsonl 里的 URL
+mineworker retry --requests    # 探活：重新下载看目标是否可达（不跑回调、不入库）
 mineworker retry               # 两者都做
 ```
 
