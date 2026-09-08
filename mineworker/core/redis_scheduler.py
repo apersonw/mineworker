@@ -35,12 +35,22 @@ _FAILED_KEY = "failed_requests"
 
 
 class _Heartbeat(threading.Thread):
-    def __init__(self, redis: Any, hkey: str, node_id: str, pending_fn: Callable[[], int]) -> None:
+    def __init__(
+        self,
+        redis: Any,
+        hkey: str,
+        node_id: str,
+        pending_fn: Callable[[], int],
+        renew_fn: Callable[[], int] | None = None,
+    ) -> None:
         super().__init__(name="heartbeat", daemon=True)
         self._redis = redis
         self._hkey = hkey
         self._node_id = node_id
         self._pending_fn = pending_fn
+        #: 顺手续租约。挂在心跳上而不是另起线程：这个线程还在跑本身就代表
+        #: 「本节点还活着」，它停了租约也就该到期 —— 两件事的判据天然是同一个
+        self._renew_fn = renew_fn
         self._stop_event = threading.Event()
 
     def run(self) -> None:
@@ -54,6 +64,8 @@ class _Heartbeat(threading.Thread):
             self._redis.expire(self._hkey, max(2, int(setting.HEARTBEAT_STALE * 4)))
         except Exception:  # 心跳失败不该拖垮爬虫
             log.debug("心跳写入失败", exc_info=True)
+        if self._renew_fn is not None:
+            self._renew_fn()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -87,9 +99,24 @@ class RedisScheduler(BaseScheduler):
         return get_request_filter(name=self._ns, redis_client=self._redis)
 
     def _on_start(self) -> None:
-        self._heartbeat = _Heartbeat(self._redis, self._hkey, self._node_id, self._local_pending)
+        self._heartbeat = _Heartbeat(
+            self._redis, self._hkey, self._node_id, self._local_pending, self._renew_leases
+        )
         self._heartbeat.start()
         log.info("节点 {} 加入（命名空间 {}）", self._node_id, self._ns)
+
+    def _renew_leases(self) -> int:
+        """把本节点还持有的任务租约往后推。
+
+        没有这一步的话租约从**领走**那刻起算，而 collector 一次领
+        `COLLECTOR_TASK_COUNT` 个 —— 排在后面的任务在被碰到之前就超时了，
+        节点全程健康却被判定「已死」，任务被别人抢去重抓一遍。
+        """
+        try:
+            return int(self._task_queue.renew(self._collector.held_requests()))
+        except Exception:
+            log.debug("续期租约失败", exc_info=True)
+            return 0
 
     def _seed(self) -> None:
         if not acquire_once(self._redis, f"{self._ns}:lock:seed", ttl=setting.SPIDER_SEED_LOCK_TTL):
