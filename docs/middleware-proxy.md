@@ -47,8 +47,8 @@ PROXY_ALLOW_DIRECT = False     # True 才允许「没代理就直连」
 
     池空时先等 `PROXY_WAIT_TIMEOUT`（默认 30 秒）并按 `PROXY_MIN_INTERVAL`
     的节奏重新取号；仍拿不到才抛 `ProxyUnavailableError`。
-    该请求走正常重试，重试用尽后落到 `failed_requests.jsonl`
-    （`mineworker retry --requests` 可回放）。
+    该请求走正常重试，重试用尽后落到 `failed_requests.jsonl`。
+    `mineworker retry --requests` 只是**探活**（重新下载看状态码，不跑回调、不入库）；要把数据真正抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫。
 
     这个错误**不计入熔断** —— 代理供应是自己这边的问题，
     算进去的话代理商断供五分钟就能把所有域全熔断一遍。

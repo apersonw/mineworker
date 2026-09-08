@@ -185,6 +185,22 @@ def _join_all(procs: list[mp.Process], timeout: float = _PROC_TIMEOUT) -> None:
     assert not alive, f"{len(alive)} 个节点没有自行退出 —— 结束检测在多进程下失效"
 
 
+def _wait_until_fetching(hits: Any, want: int, timeout: float = 30.0) -> int:
+    """等到靶子真的收到 `want` 个页面请求再动手。
+
+    原来这里是固定 `sleep`，机器一忙（macOS 的 spawn 要重启解释器、重新 import）
+    子进程还没抓到东西就被杀了 —— 用例里的「这个用例什么都没验到」守卫会报警。
+    那是守卫在正确工作，但每次都得人来判断是真缺陷还是负载。等条件就没这问题。
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        got = len([h for h in list(hits) if h.startswith("/p/")])
+        if got >= want:
+            return got
+        time.sleep(0.05)
+    return len([h for h in list(hits) if h.startswith("/p/")])
+
+
 # ---- 核心：多节点不重复、不遗漏 ---------------------------------------
 def test_three_nodes_no_duplicate_no_missing(httpserver: HTTPServer, clean_redis: str) -> None:
     """三个真进程共享一个 Redis 队列：每个 URL 恰好被抓一次。
@@ -508,7 +524,9 @@ def test_sigkilled_node_tasks_are_reclaimed(httpserver: HTTPServer, clean_redis:
             target=_run_node, args=(url, clean_redis, key), kwargs={"lease": 2.0}, daemon=False
         )
         first.start()
-        time.sleep(1.2)
+        # 等它真的抓起来再杀 —— 固定 sleep 在满负载的机器上会杀在启动阶段，
+        # 那样什么都验不到
+        _wait_until_fetching(hits, 3)
         os.kill(first.pid, signal.SIGKILL)  # 不给任何清理机会
         first.join(timeout=30)
 
@@ -562,7 +580,7 @@ def test_sigkilled_node_does_not_lose_scraped_data(
             daemon=False,
         )
         first.start()
-        time.sleep(1.5)
+        _wait_until_fetching(hits, 3)
         os.kill(first.pid, signal.SIGKILL)
         first.join(timeout=30)
 

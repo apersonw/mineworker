@@ -45,7 +45,7 @@ class MallSpider(mw.Spider):
 
     池空时先等 `USER_POOL_WAIT_TIMEOUT`（默认 10 秒，游客池能现登、拉黑也会到期），
     仍拿不到才抛 `UserUnavailableError`，走正常重试；重试耗尽后落进
-    `failed_requests.jsonl`，`mineworker retry --requests` 可回放。
+    `failed_requests.jsonl`。`mineworker retry --requests` 只是**探活**（重新下载看状态码，不跑回调、不入库）；要把数据真正抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫。
     这个错误**不计入熔断** —— 没号可用是自己这边的事，不是站点挂了。
 
     `check_login` 判断的是**响应**，和有没有挂账号无关，所以匿名发出的请求

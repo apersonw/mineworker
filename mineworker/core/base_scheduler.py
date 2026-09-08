@@ -129,8 +129,48 @@ class BaseScheduler:
         self._stop_event.set()
 
     # ------------------------------------------------------------------
-    def _seed_requests(self) -> int:
+    def _replay_failed_requests(self) -> int:
+        """把上次落盘的失败请求重新灌回队列，走完整的下载 → 回调 → 落库。
+
+        `mineworker retry --requests` 只是探活（重新下载看状态码，不跑回调），
+        数据要靠这条路才回得来。
+
+        文件先改名再消费：中途崩了那份 `.replaying` 还在，不会因为「已经读过了」
+        就把请求弄丢。这一轮仍失败的请求会照常重新落进 FAILED_REQUEST_PATH。
+        """
+        if not setting.RETRY_FAILED_ON_START:
+            return 0
+        path = Path(setting.FAILED_REQUEST_PATH)
+        if not path.is_file():
+            return 0
+        staging = path.with_suffix(path.suffix + ".replaying")
+        try:
+            path.rename(staging)
+            lines = staging.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            log.exception("读取待回放的失败请求失败")
+            return 0
         count = 0
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                request = Request.from_dict(tools.loads_json(line))
+            except Exception:
+                log.exception("这条失败请求解析不了，跳过：{}", line[:120])
+                continue
+            # 这些 URL 的指纹已经在去重里了 —— 不清掉的话灌进去会被静默挡下，
+            # 变成「回放跑了但什么都没发生」
+            request.filter_repeat = False
+            self._request_buffer.put(request)
+            count += 1
+        staging.unlink(missing_ok=True)
+        if count:
+            log.info("重新灌入 {} 条上次失败的请求", count)
+        return count
+
+    def _seed_requests(self) -> int:
+        count = self._replay_failed_requests()
         for request in self._parser.start_requests() or ():
             if not isinstance(request, Request):
                 raise SpiderError(f"start_requests 只能 yield Request，收到 {type(request)!r}")

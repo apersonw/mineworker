@@ -95,14 +95,21 @@ def retry_items(path: str | None = None) -> tuple[int, int]:
 
 
 def retry_requests(path: str | None = None) -> tuple[int, int]:
-    """重新下载失败请求。返回 (恢复条数, 仍失败条数)。"""
+    """**探活**：把失败请求重新下载一遍，看目标是否已经可达。返回 (可达条数, 仍失败条数)。
+
+    这不是数据恢复 —— **不跑回调、不产出 item、不入库**。所以记录一条都不删：
+    可达只说明站点回来了，那些页面仍然需要真正重跑一遍。
+
+    真要把数据抓回来，用 ``RETRY_FAILED_ON_START``（爬虫启动时把这个文件
+    重新灌回队列，走完整的下载 → 回调 → 落库）。
+    """
     file = Path(path or setting.FAILED_REQUEST_PATH)
     records = _read_lines(file)
     if not records:
         return (0, 0)
 
     ok = 0
-    remaining: list[Any] = []
+    unreachable = 0
     try:
         for record in records:
             request = Request.from_dict(record)
@@ -110,15 +117,20 @@ def retry_requests(path: str | None = None) -> tuple[int, int]:
             try:
                 response = request.download()
             except RequestError:
-                remaining.append(record)
+                unreachable += 1
                 continue
             if response.ok:
                 ok += 1
             else:
-                remaining.append(record)
+                unreachable += 1
     finally:
         close_default_downloaders()
 
-    _rewrite(file, remaining)
-    log.info("failed_requests 回放：恢复 {}，仍失败 {}", ok, len(remaining))
-    return (ok, len(remaining))
+    # 一条都不删：可达 ≠ 数据回来了。删掉的话，这些请求的唯一副本就没了
+    log.info(
+        "failed_requests 探活：{} 条已可达，{} 条仍不可达；记录全部保留 —— "
+        "这只是探活，数据要靠 RETRY_FAILED_ON_START 重跑才回得来",
+        ok,
+        unreachable,
+    )
+    return (ok, unreachable)

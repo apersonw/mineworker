@@ -81,5 +81,8 @@ NewsSpider(debug=True).start()
 
 ## 崩溃恢复
 
-- `failed_requests.jsonl` —— 中断退出时未完成的请求；`mineworker retry --requests` 重新下载
+- `failed_requests.jsonl` —— 中断退出时未完成的请求、以及重试耗尽的请求。
+  `mineworker retry --requests` 是**探活**（重新下载看状态码，不跑回调、不入库，记录一条不删）；
+  要把数据抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫 —— 那会把这些请求灌回队列，
+  走完整的下载 → 回调 → 落库
 - `failed_items.jsonl` —— 写库失败的数据；`mineworker retry --items` 重放到管道

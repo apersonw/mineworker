@@ -22,7 +22,7 @@ import pytest
 
 from mineworker.buffer.item_buffer import ItemBuffer
 from mineworker.core import context
-from mineworker.core.batch_store import DONE, FAILED, MemoryBatchStore
+from mineworker.core.batch_store import MemoryBatchStore
 from mineworker.core.spiders.batch_spider import BatchSpider
 from mineworker.dedup import Dedup
 from mineworker.network.request import Request

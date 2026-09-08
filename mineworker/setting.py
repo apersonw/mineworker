@@ -193,6 +193,9 @@ ITEM_FILTER_ENABLE: bool = True  # 是否对 Item 做去重（按 fingerprint）
 CSV_OUTPUT_DIR: str = "."  # CsvPipeline 输出目录
 FAILED_ITEM_PATH: str = "failed_items.jsonl"
 FAILED_REQUEST_PATH: str = "failed_requests.jsonl"
+# 启动时把 FAILED_REQUEST_PATH 里的请求重新灌回队列（走完整的下载 → 回调 → 落库）。
+# `mineworker retry --requests` 只是探活，不会把数据抓回来 —— 这个才会
+RETRY_FAILED_ON_START: bool = False
 
 # ---- 响应缓存（开发调试用）----
 # 写爬虫是来回试的过程：改一版选择器、重跑一遍，一天下来同一批页面可能被抓几十遍。
