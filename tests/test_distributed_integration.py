@@ -342,3 +342,112 @@ def test_global_throttle_caps_rate_across_nodes(httpserver: HTTPServer, clean_re
         f"关掉全局限速后峰值没升高（{peak_off}/s vs {peak_on}/s）—— "
         "这轮对照不成立，说明测试根本没压到限速线"
     )
+
+
+# ---- 启动竞态：晚一步的节点不能空跑退出 -------------------------------
+def _run_counting_node(
+    seed_url: str, redis_url: str, redis_key: str, delay: float, out: Any
+) -> None:
+    """跑一个节点，把它自己抓到的请求数回报出来。
+
+    ``delay`` 用来放大真实部署里的启动错位 —— 容器起来的时刻、pip install 的
+    耗时、start_requests 里的 DB 查询，都会让某个节点比别的晚几秒。
+    """
+    import time as _t
+
+    if delay:
+        _t.sleep(delay)
+
+    import mineworker as mw
+    from mineworker import setting
+    from mineworker.utils import log
+
+    setting.REDIS_URL = redis_url
+    setting.ITEM_PIPELINES = []
+    setting.LOG_LEVEL = "CRITICAL"
+    setting.DONE_CHECK_INTERVAL = 0.2
+    setting.DONE_CHECK_TIMES = 3
+    setting.HEARTBEAT_INTERVAL = 0.3
+    setting.SPIDER_THREAD_COUNT = 2
+    setting.RANDOM_USER_AGENT = False
+    setting.ROBOTS_OBEY = False
+    setting.DEDUP_FILTER = "redis"
+    setting.CIRCUIT_FAILURE_THRESHOLD = 0
+    # 一次只领 3 个：默认 100 会让先到的节点把整个队列一口气搬空，
+    # 那样再怎么等也轮不到第二个节点，测的就不是启动竞态了
+    setting.COLLECTOR_TASK_COUNT = 3
+    log.configure()
+
+    class Node(mw.Spider):
+        def start_requests(self):  # type: ignore[no-untyped-def]
+            yield mw.Request(seed_url, callback=self.parse_seed)
+
+        def parse_seed(self, request, response):  # type: ignore[no-untyped-def]
+            for href in response.css("a::attr(href)").getall():
+                yield mw.Request(response.urljoin(href), callback=self.parse_page)
+
+        def parse_page(self, request, response):  # type: ignore[no-untyped-def]
+            return None
+
+    spider = Node(redis_key=redis_key)
+    spider.start()
+    out.put(spider.scheduler.stats.get("request_ok"))
+
+
+def _seed_later(redis_url: str, redis_key: str, seed_url: str, delay: float) -> None:
+    """隔 ``delay`` 秒后才把种子推进队列，模拟「别的节点正在慢慢播种」。"""
+    import time as _t
+
+    _t.sleep(delay)
+    from mineworker import setting
+
+    setting.REDIS_URL = redis_url
+    import mineworker as mw
+    from mineworker.core.task_queue import RedisTaskQueue
+    from mineworker.db.redisdb import get_redis
+
+    ns = f"{setting.REDIS_KEY_PREFIX}:{redis_key}"
+    RedisTaskQueue(ns, get_redis()).put(mw.Request(seed_url, callback="parse_seed"))
+
+
+def test_node_waits_when_another_is_still_seeding(httpserver: HTTPServer, clean_redis: str) -> None:
+    """种子锁已被别人拿走、队列还空着时，本节点必须等，而不是空跑退出。
+
+    构造是确定的：**测试自己先占住种子锁**（模拟另一个节点正在播种），
+    节点起来后发现锁拿不到、队列也是空的 —— 正是线上第二个 worker 撞上的局面。
+    3 秒后种子才进队列。
+
+    没有启动宽限时，节点会在 `DONE_CHECK_TIMES × DONE_CHECK_INTERVAL`
+    （这里 0.6 秒）内判定「抓完了」退出，一个请求都不抓。心跳挡不住 ——
+    那一刻心跳表里根本没有别的节点。
+    """
+    import redis as redis_lib
+
+    key = f"race{os.getpid()}"
+    ns = f"mineworker:{key}"
+    client = redis_lib.from_url(clean_redis, decode_responses=True)
+    # 先占住种子锁：本节点将走「另一节点已注入种子，直接消费队列」那条路
+    client.set(f"{ns}:lock:seed", "1", nx=True, ex=600)
+
+    with mp.Manager() as mgr:
+        hits = mgr.list()
+        out: Any = mp.Queue()
+        _serve(httpserver, hits)
+        url = httpserver.url_for("/seed")
+        procs = [
+            mp.Process(target=_run_counting_node, args=(url, clean_redis, key, 0.0, out)),
+            mp.Process(target=_seed_later, args=(clean_redis, key, url, 3.0)),
+        ]
+        for p in procs:
+            p.start()
+        _join_all(procs)
+        done = out.get()
+        # 必须在 with 块内取值：manager 一关，代理对象就用不了了
+        seen_pages = len([p for p in Counter(list(hits)) if p.startswith("/p/")])
+
+    client.close()
+    assert done > 0, (
+        "节点一个请求都没抓 —— 它在种子进队列之前就判定「抓完了」退出了。"
+        "线上表现为：配 N 个 worker，实际只有 1 个在干活"
+    )
+    assert seen_pages == PAGES, f"漏抓：只见到 {seen_pages}/{PAGES}"

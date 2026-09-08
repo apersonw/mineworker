@@ -19,6 +19,7 @@ from mineworker.core.base_scheduler import BaseScheduler
 from mineworker.core.task_queue import RedisTaskQueue
 from mineworker.db.redisdb import acquire_once, get_redis
 from mineworker.dedup import get_request_filter
+from mineworker.utils import stats as sk
 from mineworker.utils import tools
 from mineworker.utils.log import get_logger
 
@@ -73,6 +74,9 @@ class RedisScheduler(BaseScheduler):
         self._node_id = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
         self._hkey = f"{self._ns}:heartbeat"
         self._heartbeat: _Heartbeat | None = None
+        #: 本节点是否拿到过任务 —— 启动宽限只保护「一个都没见过」的窗口
+        self._seen_work = False
+        self._started_at = time.monotonic()
         super().__init__(parser, **kwargs)
 
     # ------------------------------------------------------------------
@@ -99,7 +103,30 @@ class RedisScheduler(BaseScheduler):
     def _is_done(self) -> bool:
         if self._keep_alive:
             return False
+        if self._in_startup_grace():
+            return False
         return self._local_idle() and self._task_queue.empty() and self._all_nodes_idle()
+
+    def _in_startup_grace(self) -> bool:
+        """本节点还在启动宽限期内、且**一个任务都没见过**。
+
+        多节点同时启动时只有一个能拿到种子锁，其余节点看到的是空队列。没有这个
+        宽限的话，它们会在 `DONE_CHECK_TIMES × DONE_CHECK_INTERVAL`（默认 1.5 秒）
+        内判定「抓完了」直接退出 —— 而播种节点那时往往还没把种子推进队列。
+
+        `_all_nodes_idle()` 挡不住这个：播种节点在那一刻的 pending 也是 0，
+        它自己还没开始拉活，看上去和「闲着」没区别。
+
+        只有从没拿到过任务的节点才等；拿到过活之后 `_seen_work` 为真，
+        后续判定完全按原来的规则走，不会拖慢正常结束。
+        """
+        if self._seen_work:
+            return False
+        if self.stats.get(sk.REQUEST_OK) or self.stats.get(sk.REQUEST_FAILED):
+            self._seen_work = True
+            return False
+        grace = setting.SPIDER_STARTUP_GRACE
+        return grace > 0 and time.monotonic() - self._started_at < grace
 
     def _all_nodes_idle(self) -> bool:
         now = time.time()
