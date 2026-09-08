@@ -79,10 +79,30 @@ class ItemBuffer(threading.Thread):
         self._ack = ack
         #: (item, 产出它的请求) —— owner 为 None 表示没人等着它销账
         self._pending: list[tuple[Any, Any]] = []
+        #: 按 owner 挂的「落库之后再做」回调。BatchSpider 用它把任务表的
+        #: 「已完成」推迟到数据真的落库之后 —— 否则任务标了 DONE 而数据还在内存里，
+        #: 节点一死，防丢机制只回收 DOING，这些任务永远不会被重跑
+        self._after_persist: dict[int, list[Any]] = {}
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
 
     # ------------------------------------------------------------------
+    def owns(self, owner: Any) -> bool:
+        """`owner` 还有 item 压在缓冲里没落库吗。
+
+        已经 flush 过就返回 False —— 那时数据已经在库里，调用方可以立刻动作。
+        """
+        with self._lock:
+            return any(o is owner for _, o in self._pending)
+
+    def after_persist(self, owner: Any, fn: Any) -> None:
+        """`owner` 产出的数据整批落库之后再执行 `fn`。
+
+        落库失败时**不执行** —— 让上游的状态留在「处理中」，由防丢机制回收重跑。
+        """
+        with self._lock:
+            self._after_persist.setdefault(id(owner), []).append(fn)
+
     def put(self, item: Any, owner: Any = None) -> None:
         with self._lock:
             self._pending.append((item, owner))
@@ -141,13 +161,23 @@ class ItemBuffer(threading.Thread):
         self._ack_all(owners.values())
 
     def _ack_all(self, owners: Any) -> None:
-        if self._ack is None:
-            return
         for owner in owners:
+            self._run_after_persist(owner)
+            if self._ack is None:
+                continue
             try:
                 self._ack(owner)
             except Exception:
                 log.exception("任务销账失败")
+
+    def _run_after_persist(self, owner: Any) -> None:
+        with self._lock:
+            hooks = self._after_persist.pop(id(owner), None)
+        for fn in hooks or ():
+            try:
+                fn()
+            except Exception:
+                log.exception("落库后回调异常")
 
     def _persist(self, batch: list[Any]) -> None:
         dedup = self._get_dedup()

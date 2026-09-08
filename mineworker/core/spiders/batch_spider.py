@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from mineworker import setting
+from mineworker.core import context
 from mineworker.core.base_parser import BaseParser
 from mineworker.core.batch_store import DONE, FAILED
 from mineworker.utils import tools
@@ -97,8 +98,25 @@ class BatchSpider(BaseParser):
     # 任务状态回写
     # ------------------------------------------------------------------
     def update_task(self, task_id: Any, *, ok: bool = True) -> None:
-        """回写任务状态：``ok=True`` → 已完成；``ok=False`` → 失败（不再重试）。"""
-        self._store.mark_task(task_id, DONE if ok else FAILED)
+        """回写任务状态：``ok=True`` → 已完成；``ok=False`` → 失败（不再重试）。
+
+        标「已完成」会**等这次请求产出的数据真正落库之后**才写任务表。
+        照文档在回调里 ``yield`` 完 item 紧接着调用它 —— 那一刻数据还只在内存缓冲里，
+        立刻写 DONE 的话，节点一死数据就没了，而防丢机制**只回收「处理中」**，
+        标了 DONE 的任务永远不会被重跑。真库实测：5 个任务全标 DONE，落库 0 行。
+
+        三条例外走立即写入：没产出 item 的请求（否则永远等不到落库）、
+        ``ok=False``（标失败不取决于数据）、以及不在请求上下文里调用（比如 master）。
+        """
+        if not ok:
+            self._store.mark_task(task_id, FAILED)
+            return
+        buffer = context.get_current_item_buffer()
+        request = context.get_current_request()
+        if buffer is None or request is None or not buffer.owns(request):
+            self._store.mark_task(task_id, DONE)
+            return
+        buffer.after_persist(request, lambda: self._store.mark_task(task_id, DONE))
 
     def failed_request(self, request: Request, response: Response | None) -> Iterable[Any] | None:
         """重试耗尽后：把对应任务标为失败。覆写时记得 super()。"""
