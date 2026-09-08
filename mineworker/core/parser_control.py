@@ -133,9 +133,7 @@ class ParserWorker(threading.Thread):
         if response is not None:
             resp_out = self._middleware.process_response(request, response)
             if isinstance(resp_out, Request):
-                resp_out.filter_repeat = False
-                self._request_buffer.put(resp_out)
-                self._stats.incr(sk.REQUEST_OK)
+                self._retry_replacement(request, resp_out, response)
                 return
             response = resp_out
 
@@ -265,6 +263,35 @@ class ParserWorker(threading.Thread):
         if delay > 0:
             time.sleep(delay)
         self._request_buffer.put_retry(request)
+
+    def _retry_replacement(
+        self, request: Request, retry: Request, response: Response
+    ) -> None:
+        """中间件把响应换成了一个新请求（「掉登录，换号重试」那种）。
+
+        这条路原本既不递增 `retry_times` 也不走 `_retry_or_fail`，而中间件还会清掉
+        `filter_repeat` —— 于是重试上限管不住它、去重也拦不住它。
+        实测 1 个页面被打了 **76 次 / 8 秒**，只被运行时长上限拦住。
+
+        预算要从**原请求**接过来：重试的是中间件换过的那个请求（换了 cookie、
+        清了字段），从 0 开始的话等于没加上限。
+        """
+        if request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
+            self._fail(request, response, reason="中间件反复要求重试")
+            return
+        retry.retry_times = request.retry_times + 1
+        retry.filter_repeat = False
+        # 记 RETRY 而不是 REQUEST_OK：一次「被判为无效、要重来」的响应
+        # 算成「请求成功」，汇总里的数字就成了假的
+        self._stats.incr(sk.RETRY)
+        log.warning(
+            "中间件要求重试，第 {}/{} 次：{} {}",
+            retry.retry_times,
+            setting.SPIDER_MAX_RETRY_TIMES,
+            retry.method,
+            retry.url,
+        )
+        self._request_buffer.put(retry)
 
     def _fail(
         self,
