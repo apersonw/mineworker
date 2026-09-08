@@ -35,6 +35,16 @@ class Collector:
                 self._buffer.extend(extra)
         return first
 
+    def done(self, request: Request) -> None:
+        """任务处理完了，给队列销账（内存队列没有租约，静默跳过）。
+
+        不销账的话，任务会一直挂在在途表里，直到租约到期被当成「节点死了」
+        重新放回队列 —— 于是每个任务都被抓两遍。
+        """
+        done = getattr(self._queue, "done", None)
+        if done is not None:
+            done(request)
+
     def is_empty(self) -> bool:
         with self._lock:
             buffered = bool(self._buffer)

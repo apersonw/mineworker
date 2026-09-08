@@ -65,6 +65,15 @@ class Request:
         self.url = url
         self.method = method.upper()
         self.callback = callback
+        #: 从 Redis 领走时记下的**原始 payload**，销账要用它。
+        #:
+        #: 不能靠重新序列化来找这一条：`retry_times` 等字段在处理过程中会变，
+        #: 得到的字符串和当初存进去的对不上，`zrem` 就删不掉，任务会在租约到期后
+        #: 被白白重抓一遍。
+        #:
+        #: 刻意不进 `to_dict()`：它只在本进程内有意义，跟着请求序列化出去反而会
+        #: 让重新入队的任务带上一个早已失效的旧 token。
+        self.lease_token: str | None = None
         self.priority = priority
         self.retry_times = retry_times
         self.filter_repeat = filter_repeat
