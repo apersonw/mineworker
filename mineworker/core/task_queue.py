@@ -121,10 +121,17 @@ class RedisTaskQueue:
     def _take(self, count: int) -> list[Request]:
         """取至多 ``count`` 个任务，并把它们记进在途表。"""
         lease = setting.SPIDER_TASK_LEASE
-        deadline = (time.time() + lease) if lease > 0 else 0
-        members = self._r.register_script(_TAKE_LUA)(
-            keys=[self._key, self._inflight_key], args=[str(max(1, int(count))), f"{deadline:.3f}"]
-        )
+        if lease <= 0:
+            # 关掉租约就别再走 Lua：这是给「Redis 不支持 EVAL」的部署留的退路
+            # （某些托管 / 代理型 Redis 会禁用脚本）。走脚本的话这条退路等于不存在
+            rows = self._r.zpopmin(self._key, max(1, count))
+            members = [member for member, _ in rows]
+        else:
+            deadline = time.time() + lease
+            members = self._r.register_script(_TAKE_LUA)(
+                keys=[self._key, self._inflight_key],
+                args=[str(max(1, int(count))), f"{deadline:.3f}"],
+            )
         out: list[Request] = []
         for member in members:
             request = _decode(member)
