@@ -9,7 +9,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from mineworker import setting
-from mineworker.network import throttle
+from mineworker.network import cache, throttle
 from mineworker.network.downloader._common import resolve_impersonate
 from mineworker.network.downloader._httpx import HttpxDownloader
 from mineworker.network.downloader.base import Downloader
@@ -81,6 +81,11 @@ def _build(key: str, request: Request) -> Downloader:
 
 
 def download_request(request: Request, downloader: Downloader | None = None) -> Response:
+    # 缓存查在限速之前：命中就该完全不碰网络，也不该占掉一个限速名额 ——
+    # 否则「重跑不打扰目标站」这件事只做了一半
+    cached = cache.load(request)
+    if cached is not None:
+        return cached
     # 限速放在这里而不是中间件里：parser_control 中 process_request 与下载处在两个
     # 独立的 try，下载抛异常时 process_response 不会执行，中间件拿的名额会泄漏。
     # 这里的 with 保证无论成功失败都释放。
@@ -91,6 +96,7 @@ def download_request(request: Request, downloader: Downloader | None = None) -> 
         from mineworker.network import antibot
 
         antibot.raise_if_blocked(response)
+    cache.store(request, response)
     return response
 
 

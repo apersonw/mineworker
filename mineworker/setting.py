@@ -171,6 +171,17 @@ CSV_OUTPUT_DIR: str = "."  # CsvPipeline 输出目录
 FAILED_ITEM_PATH: str = "failed_items.jsonl"
 FAILED_REQUEST_PATH: str = "failed_requests.jsonl"
 
+# ---- 响应缓存（开发调试用）----
+# 写爬虫是来回试的过程：改一版选择器、重跑一遍，一天下来同一批页面可能被抓几十遍。
+# 打开后第一遍照常抓，之后重跑直接读本地文件 —— 省时间，也是对目标站的礼貌。
+#
+# **默认关闭，且只该在开发期开** —— 跑生产时开着很容易出事：你以为在抓新数据，
+# 实际读的是几天前的副本。只缓存 GET（POST 不幂等）和状态码正常的响应
+# （把 429 存下来重放，等于每次重跑都在读那张限速页）。
+RESPONSE_CACHE_ENABLE: bool = False
+RESPONSE_CACHE_PATH: str = ".mineworker_cache"
+RESPONSE_CACHE_EXPIRE: float = 3600.0  # 秒；0 = 不过期
+
 # ---- 去重 ----
 # memory（进程内布隆）| lite（进程内精确 set）| redis（Redis 布隆）| redis-set（Redis 精确）
 DEDUP_FILTER: str = "memory"

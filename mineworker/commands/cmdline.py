@@ -95,6 +95,30 @@ def retry(
         typer.echo(f"failed_requests：恢复 {ok}，仍失败 {failed}")
 
 
+@app.command()
+def cache(
+    clear: Annotated[bool, typer.Option("--clear", help="清空响应缓存目录")] = False,
+) -> None:
+    """查看 / 清理响应缓存（`RESPONSE_CACHE_PATH`）。
+
+    改了解析逻辑想重新抓一遍真实页面时，清一下就行 —— 不必等过期。
+    """
+    from pathlib import Path
+
+    from mineworker import setting
+    from mineworker.network import cache as cache_mod
+
+    root = Path(setting.RESPONSE_CACHE_PATH)
+    if clear:
+        typer.echo(f"已清理 {cache_mod.clear()} 条缓存（{root}）")
+        return
+    entries = list(root.rglob("*.json")) if root.is_dir() else []
+    size = sum(e.stat().st_size for e in entries)
+    typer.echo(f"{root}：{len(entries)} 条，{size / 1024 / 1024:.1f}MB")
+    if not setting.RESPONSE_CACHE_ENABLE:
+        typer.echo("提示：RESPONSE_CACHE_ENABLE 当前是关的，缓存不会被读写")
+
+
 def main() -> None:
     app()
 
