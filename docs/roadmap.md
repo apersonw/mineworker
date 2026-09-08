@@ -429,6 +429,52 @@ pipeline 只是打包发送、**并不保证原子**，两个节点会同时把�
 **顺带堵掉一个**：`flush()` 里落库抛穿会把整个 `ItemBuffer` 线程带走，从此再没有
 任何数据落库，而且一声不响。现在捕获 + 不销账（任务留给租约回收）。
 
+### v4.15 —— dump 是有损的
+
+> **动因**：v4.14 把「dump 到 `failed_items` 也算落到了持久介质，可以销账」
+> 写成了保证。那条退路本身，我从没验过。
+>
+> 实测（真 PostgreSQL，默认 `POSTGRES_ON_CONFLICT="nothing"`，
+> 文档里写着「对爬虫最安全」的那个）：一条 `UpdateItem` 写库失败被 dump，
+> 然后跑 `mineworker retry --items` ——
+>
+> | | |
+> |---|---|
+> | dump 出来的行 | `{"table": ..., "data": {...}}` —— **`update_keys` 没了** |
+> | retry 报告 | 成功 1 条，仍失败 0 条 |
+> | dump 文件 | **已删除**（最后一份副本没了） |
+> | 库里那行 | `title='旧标题' score=1` —— **更新丢了** |
+>
+> 链条是：`_dump_failed` 只记 `table` + `data`，`is_update` / `update_keys` /
+> 逐条的 `pipelines` 路由全丢；`retry_items` 于是无条件走 `save_items`，
+> 即 INSERT 而非 UPSERT；PG 的 `DO NOTHING` 让这条 INSERT 什么都不做**并返回成功**；
+> retry 据此报告成功、删掉文件。
+>
+> 每一环都「按自己的契约正确工作」，合起来是**静默、永久、还报告成功**的丢失。
+>
+> 为什么一直没被发现：`test_cli.py` 用的 `CapturePipeline` 是个假管道，
+> 对什么都返回 True —— 和 v4.14 那次「分布式用例全写着 `ITEM_PIPELINES = []`」
+> 是同一个盲区：**假的下游让上游的语义错误无从暴露**。
+
+| 阶段 | 内容 | 关键张力 |
+|---|---|---|
+| ~~**A · dump 记全**~~ ✅ | 除 `table` / `data` 外，把 `update_keys` 和逐条的 `pipelines` 路由一并记下 | 老的 dump 文件没有这些字段，读的时候不能炸，也不能凭空当成 update —— 缺字段就退回今天的行为（普通插入） |
+| ~~**B · retry 按记录回放**~~ ✅ | 按 (表, update_keys, pipelines) 分组：带 update_keys 的走 `update_items`，其余走 `save_items`；管道按记录里的路由解析，而不是一律用当前全部 `ITEM_PIPELINES` | 管道可能根本没实现 `update_items`（基类直接抛）。抛了要当成失败留在文件里，**不能让 retry 整个崩掉** —— 那会连带丢掉本可以回放的其它记录 |
+| ~~**C · 验证必须用真库**~~ ✅ | 判据是**库里那行的值**，不是 retry 的返回码 | 假管道对什么都返回 True，正是这个缺陷活下来的原因。用真 PG + `on_conflict=nothing` 复现，再确认修复后那行真的变成了新值 |
+
+**不做**：不改 `POSTGRES_ON_CONFLICT` 的默认值。`nothing` 对普通抓取确实是最安全的，
+问题不在它，在于回放时把 update 当成了 insert。
+
+**实测**：同样的 UpdateItem 走 dump → retry 一圈，库里那行从 `旧标题/1`
+变成了 `新标题/99`。
+
+**反向验证两组，判据都取自库里那行的值**：只不记 `update_keys` → 精确重现
+`'旧标题'/1`；只把回放改回一律 `save_items` → 3 条红。两处都是承重的。
+
+**同一个盲区第二次现形**：v4.14 是「分布式用例全写着 `ITEM_PIPELINES = []`」，
+这次是「retry 用例用的 `CapturePipeline` 对什么都返回 True」。
+**假的下游让上游的语义错误无从暴露** —— 而这两处的假下游都是我自己当初写的。
+
 ## 设计约束
 
 - 与 feapder **API 心智兼容**，不追求代码级兼容

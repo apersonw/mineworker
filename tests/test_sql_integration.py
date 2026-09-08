@@ -8,11 +8,13 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
-from mineworker import setting
+from mineworker import UpdateItem, setting
 
 pytestmark = pytest.mark.integration
 
@@ -158,3 +160,78 @@ def test_mysql_without_on_duplicate_reports_failure(
     monkeypatch.setattr(setting, "MYSQL_UPDATE_ON_DUPLICATE", False)
     pipe.save_items(TABLE, [{"url": "https://z", "title": "一", "score": 1}])
     assert pipe.save_items(TABLE, [{"url": "https://z", "title": "二", "score": 2}]) is False
+
+
+# ---- 失败数据 dump 一圈回放之后 ---------------------------------------
+class _RefusingPipeline:
+    """写库失败 —— 这批会被 dump 到 failed_items。"""
+
+    def save_items(self, table: str, items: list[dict[str, Any]]) -> bool:
+        return False
+
+    def update_items(self, t: str, i: list[dict[str, Any]], k: list[str]) -> bool:
+        return False
+
+    def close(self) -> None:
+        return None
+
+
+class _PriceItem(UpdateItem):
+    __table_name__ = TABLE
+    __update_key__ = ["url"]
+
+
+def test_failed_update_survives_the_dump_round_trip(
+    pg: Any, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """写失败的 `UpdateItem` 经 dump → `retry --items` 之后，那次更新必须还在。
+
+    判据是**库里那行的值**，不是 retry 的返回码 —— 假管道对什么都返回 True，
+    正是这个缺陷能活下来的原因（`test_cli.py` 用的就是假管道）。
+
+    修复前实测：dump 只记了 table + data，retry 于是无条件走 `save_items`，
+    而默认 `on_conflict="nothing"` 让这条 INSERT 什么都不做**并返回成功**；
+    retry 报告「成功 1，仍失败 0」、删掉文件，库里那行还是旧值。
+    静默、永久、还报告成功。
+    """
+    from mineworker.buffer.item_buffer import ItemBuffer
+    from mineworker.commands.retry import retry_items
+    from mineworker.dedup import Dedup
+    from mineworker.utils.stats import Stats
+
+    pipe, db, quoted = pg
+    dump = tmp_path / "failed.jsonl"
+    monkeypatch.setattr(setting, "FAILED_ITEM_PATH", str(dump))
+    monkeypatch.setattr(setting, "ITEM_FILTER_ENABLE", False)
+    monkeypatch.setattr(setting, "POSTGRES_ON_CONFLICT", "nothing")
+    monkeypatch.setattr(
+        setting, "ITEM_PIPELINES", ["mineworker.pipelines.postgres.PostgresPipeline"]
+    )
+    # retry 会按 setting.POSTGRES_* 自己建连接，而夹具走的是 URL —— 对齐到同一个库
+    parts = urlsplit(os.environ["MINEWORKER_TEST_POSTGRES_URL"])
+    monkeypatch.setattr(setting, "POSTGRES_HOST", parts.hostname or "localhost")
+    monkeypatch.setattr(setting, "POSTGRES_PORT", parts.port or 5432)
+    monkeypatch.setattr(setting, "POSTGRES_USER", parts.username or "postgres")
+    monkeypatch.setattr(setting, "POSTGRES_PASSWORD", parts.password or "")
+    monkeypatch.setattr(setting, "POSTGRES_DB", parts.path.lstrip("/") or "mineworker")
+
+    pipe.save_items(TABLE, [{"url": "https://dump", "title": "旧标题", "score": 1}])
+
+    buf = ItemBuffer(
+        Stats(),
+        pipelines=[f"{__name__}._RefusingPipeline"],
+        dedup=Dedup(filter_type="lite"),
+    )
+    item = _PriceItem()
+    item.url, item.title, item.score = "https://dump", "新标题", 99
+    buf.put(item)
+    buf.flush()
+    assert dump.exists(), "写库失败却没 dump，这个用例什么都没验到"
+
+    ok, failed = retry_items()
+
+    row = next(r for r in _rows(db, quoted) if r["url"] == "https://dump")
+    assert (row["title"], row["score"]) == ("新标题", 99), (
+        f"回放之后库里还是 {row['title']!r}/{row['score']} —— 那次更新被静默丢弃了，"
+        f"而 retry 报告「成功 {ok}，仍失败 {failed}」并删掉了文件（最后一份副本）"
+    )

@@ -157,7 +157,27 @@ DEDUP_FILTER = "lite"     # 精确 set，内存换准确
 ## 写库失败
 
 某批 `save_items` 返回 `False` → dump 到 `failed_items.jsonl`，指纹不记。
-恢复：`mineworker retry --items`（用当前 `ITEM_PIPELINES` 重放，仍失败的写回文件）。
+恢复：`mineworker retry --items`（仍失败的写回文件，全部成功则删除文件）。
+
+dump 出来的每行**带着回放所需的全部信息**，而不只是表名和数据：
+
+```json
+{"table": "prices", "data": {"url": "...", "price": 99}, "update_keys": ["url"]}
+```
+
+`update_keys` 决定回放走 `update_items` 还是 `save_items`。少了它，
+`UpdateItem` 会退化成普通 INSERT —— 而 PostgreSQL 默认的
+[`ON CONFLICT DO NOTHING`](#postgresql) 会让这条 INSERT **什么都不做并返回成功**，
+于是 `retry` 报告成功、删掉文件，那次更新永久消失。
+
+逐条指定了 `item.pipelines` 的数据同样会记下路由，
+回放时只走它自己那几个管道，不会被灌进当前全部 `ITEM_PIPELINES`。
+
+!!! note "老的 dump 文件仍然能回放"
+    没有这些字段的旧记录按普通插入处理。
+
+管道要是没实现 `update_items`（基类直接抛），那一组算失败留在文件里，
+**不会让整个回放崩掉** —— 否则会连带丢掉本来能回放的其它记录。
 
 ## 落库之后才给任务销账
 

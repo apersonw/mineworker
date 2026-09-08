@@ -47,22 +47,47 @@ def retry_items(path: str | None = None) -> tuple[int, int]:
     if not records:
         return (0, 0)
 
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    # 按 (表, update_keys, 管道路由) 分组 —— 只按表分组的话，UpdateItem 会退化成
+    # 普通 INSERT：PG 默认 ON CONFLICT DO NOTHING 会让它什么都不做**并返回成功**，
+    # 于是这里报告成功、删掉文件，那次更新永久消失
+    groups: dict[tuple[str, tuple[str, ...], tuple[str, ...] | None], list[Any]] = defaultdict(list)
     for record in records:
-        groups[record["table"]].append(record["data"])
+        keys = tuple(record.get("update_keys") or ())
+        paths = record.get("pipelines")
+        groups[(record["table"], keys, tuple(paths) if paths else None)].append(record)
 
-    pipelines = [tools.load_object(p)() for p in setting.ITEM_PIPELINES]
+    cache: dict[tuple[str, ...] | None, list[Any]] = {}
+
+    def _pipelines(paths: tuple[str, ...] | None) -> list[Any]:
+        if paths not in cache:
+            cache[paths] = [tools.load_object(p)() for p in (paths or setting.ITEM_PIPELINES)]
+        return cache[paths]
+
     ok = 0
     remaining: list[Any] = []
     try:
-        for table, datas in groups.items():
-            if all(p.save_items(table, datas) for p in pipelines):
+        for (table, keys, paths), rows in groups.items():
+            datas = [r["data"] for r in rows]
+            try:
+                if keys:
+                    done = all(
+                        p.update_items(table, datas, list(keys)) for p in _pipelines(paths)
+                    )
+                else:
+                    done = all(p.save_items(table, datas) for p in _pipelines(paths))
+            except Exception:
+                # 管道可能压根没实现 update_items（基类直接抛）。这批算失败留在文件里，
+                # 但**不能让整个回放崩掉** —— 那会连带丢掉本来能回放的其它记录
+                log.exception("[{}] {} 条回放异常，留在文件里", table, len(datas))
+                done = False
+            if done:
                 ok += len(datas)
             else:
-                remaining.extend({"table": table, "data": d} for d in datas)
+                remaining.extend(rows)
     finally:
-        for p in pipelines:
-            p.close()
+        for pipes in cache.values():
+            for p in pipes:
+                p.close()
 
     _rewrite(file, remaining)
     log.info("failed_items 回放：成功 {}，仍失败 {}", ok, len(remaining))
