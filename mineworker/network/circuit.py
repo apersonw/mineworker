@@ -20,6 +20,7 @@ from mineworker.exceptions import (
     ProxyUnavailableError,
     RequestError,
     ResponseTooLargeError,
+    UserUnavailableError,
 )
 from mineworker.network import throttle
 from mineworker.utils.log import get_logger
@@ -50,6 +51,9 @@ def counts_as_unhealthy(exc: BaseException | None, response: Response | None) ->
     # 拿不到代理是**我们自己的供应问题**，和目标站健不健康无关。
     # 算进去的话，代理商断供五分钟就能把所有域全熔断一遍
     if isinstance(exc, ProxyUnavailableError):
+        return False
+    # 账号全被拉黑同理：是我们这边没号可用，不是站点挂了
+    if isinstance(exc, UserUnavailableError):
         return False
     # 网络层错误（超时、连不上、TLS 失败……）
     return isinstance(exc, RequestError)

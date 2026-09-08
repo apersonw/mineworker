@@ -178,6 +178,13 @@ PROXY_WAIT_TIMEOUT: float = 30.0
 # 而那正是开代理池要避免的。设成 True 就是明确接受「有代理就用、没有就直连」
 PROXY_ALLOW_DIRECT: bool = False
 
+# ---- 账号 / Cookie 池 ----
+# 池空时最多等多久（秒）—— 游客池能现登，拉黑也会到期
+USER_POOL_WAIT_TIMEOUT: float = 10.0
+# 拿不到账号时是否允许匿名发出。默认 False：需要登录的站会回一张登录墙，
+# 那张页面会被当成数据存进库。设成 True 就是明确接受「有号更好、没号也能抓」
+USER_POOL_ALLOW_ANONYMOUS: bool = False
+
 # ---- Item / 管道 ----
 ITEM_MAX_CACHED_COUNT: int = 5000  # ItemBuffer 达到此量立即 flush
 ITEM_PIPELINES: list[str] = ["mineworker.pipelines.console.ConsolePipeline"]
