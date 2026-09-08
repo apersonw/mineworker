@@ -260,6 +260,9 @@ METRICS_PROMETHEUS_PORT: int = 0  # >0 且装了 prometheus-client 时起 export
 # ---- 告警 ----
 WARNING_ENABLE: bool = True  # 关掉则完全不告警
 WARNING_FEISHU_WEBHOOK: str = ""
+WARNING_DINGTALK_WEBHOOK: str = ""
+WARNING_DINGTALK_SECRET: str = ""  # 钉钉「加签」模式的密钥；用「自定义关键词」则留空
+WARNING_WECHAT_WEBHOOK: str = ""  # 企业微信群机器人
 WARNING_EMAIL: dict[str, Any] = {}  # {host, port, user, password, to: [...], ssl: bool}
 WARNING_INTERVAL: float = 300.0  # 同类告警的最小间隔（秒），防刷屏
 WARNING_FAILED_RATE: float = 0.5  # 失败率阈值

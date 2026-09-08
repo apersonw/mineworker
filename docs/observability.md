@@ -28,7 +28,12 @@ mineworker_in_flight 4.0
 
 ```python
 WARNING_ENABLE = True
+# 群机器人（配几个就发几个）
 WARNING_FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+WARNING_DINGTALK_WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+WARNING_DINGTALK_SECRET = "SECxxx"     # 「加签」模式的密钥；用「自定义关键词」则留空
+WARNING_WECHAT_WEBHOOK = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+
 WARNING_EMAIL = dict(host="smtp.qq.com", port=465, ssl=True,
                      user="bot@qq.com", password="***", to=["me@corp.com"])
 
@@ -40,6 +45,30 @@ WARNING_INTERVAL = 300         # 同类告警最小间隔，防刷屏
 ```
 
 调度器在结束检测循环里顺带跑告警检查。默认还有一个 `LogNotifier`（写 WARNING 日志）。
+
+### 钉钉的两种安全模式
+
+钉钉群机器人必须配安全设置，两选一：
+
+- **加签** —— 填 `WARNING_DINGTALK_SECRET`，框架自动带上 `timestamp` 和签名
+- **自定义关键词** —— 不填 secret；消息标题固定带 `【MineWorker】`，
+  把关键词设成 `MineWorker` 即可
+
+企业微信没有签名机制，webhook 里的 key 就是凭据。
+
+### 发送失败会被记下来
+
+三家群机器人在 **webhook 失效、关键词不匹配、需要加签**这些情况下**都返回 HTTP 200**，
+真正的结果在响应体的错误码里。所以框架会检查状态码**和**响应体，被拒绝时记 ERROR 日志：
+
+```
+钉钉告警被拒绝：errcode=310000 keywords not in content
+```
+
+!!! warning "为什么要专门检查这个"
+    告警系统静默失效是最坏的一种失效 —— 出事那天你才发现它自己早就哑了。
+    配好之后建议先手动触发一次（比如把 `WARNING_STALL_SECONDS` 调到 1 秒跑一遍），
+    确认群里真的收得到。
 
 ## 调试
 

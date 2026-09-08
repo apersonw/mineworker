@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import smtplib
 import time
+import urllib.parse
 from email.mime.text import MIMEText
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -28,16 +32,94 @@ class LogNotifier:
         log.warning("[告警] {}：{}", title, message)
 
 
+def _post_webhook(name: str, url: str, payload: dict[str, Any]) -> None:
+    """发一条群机器人消息，**把失败查出来**。
+
+    飞书 / 钉钉 / 企业微信在 webhook 失效、关键词不匹配、需要加签这些情况下
+    **都返回 HTTP 200**，真正的结果在 body 的错误码里。而 `httpx.post` 对
+    4xx/5xx 也不会抛异常。所以只捕获 `HTTPError` 的写法等于什么都没检查 ——
+    你以为告警发出去了，其实一条都没到。
+
+    告警系统静默失效是最坏的一种：出事那天才发现它自己早就哑了。
+    """
+    try:
+        resp = httpx.post(url, json=payload, timeout=10)
+        resp.raise_for_status()
+        body = resp.json()
+    except httpx.HTTPError as exc:
+        log.error("{}告警发送失败：{!r}", name, exc)
+        return
+    except ValueError:  # 响应不是 JSON：少见，但也说明对面不对劲
+        log.error("{}告警响应不是 JSON，可能 webhook 地址填错了", name)
+        return
+    # 三家的成功码都是 0，只是字段名不同（钉钉/企微 errcode，飞书 code）
+    for field in ("errcode", "code", "StatusCode"):
+        if field in body and body[field] not in (0, None):
+            log.error(
+                "{}告警被拒绝：{}={} {}",
+                name,
+                field,
+                body[field],
+                body.get("errmsg") or body.get("msg") or "",
+            )
+            return
+
+
 class FeishuNotifier:
     def __init__(self, webhook: str) -> None:
         self._webhook = webhook
 
     def send(self, title: str, message: str) -> None:
-        payload = {"msg_type": "text", "content": {"text": f"【{title}】{message}"}}
-        try:
-            httpx.post(self._webhook, json=payload, timeout=10)
-        except httpx.HTTPError as exc:
-            log.error("飞书告警发送失败：{!r}", exc)
+        _post_webhook(
+            "飞书",
+            self._webhook,
+            {"msg_type": "text", "content": {"text": f"【{title}】{message}"}},
+        )
+
+
+class DingTalkNotifier:
+    """钉钉群机器人。
+
+    钉钉要求机器人做安全设置，常用的是「加签」：给 `secret` 之后每次请求都要带
+    `timestamp` 和 HMAC-SHA256 签名。另一种是「自定义关键词」——那种不用签名，
+    但消息里必须含关键词，所以标题固定带上 MineWorker 方便配。
+    """
+
+    def __init__(self, webhook: str, secret: str = "") -> None:
+        self._webhook = webhook
+        self._secret = secret
+
+    def _signed_url(self) -> str:
+        if not self._secret:
+            return self._webhook
+        ts = str(round(time.time() * 1000))
+        digest = hmac.new(
+            self._secret.encode(), f"{ts}\n{self._secret}".encode(), hashlib.sha256
+        ).digest()
+        sign = urllib.parse.quote_plus(base64.b64encode(digest))
+        sep = "&" if "?" in self._webhook else "?"
+        return f"{self._webhook}{sep}timestamp={ts}&sign={sign}"
+
+    def send(self, title: str, message: str) -> None:
+        _post_webhook(
+            "钉钉",
+            self._signed_url(),
+            {"msgtype": "text", "text": {"content": f"【MineWorker】{title}：{message}"}},
+        )
+
+
+class WeChatWorkNotifier:
+    """企业微信群机器人。没有签名机制，webhook 里的 key 就是凭据。"""
+
+    def __init__(self, webhook: str) -> None:
+        self._webhook = webhook
+
+    def send(self, title: str, message: str) -> None:
+        _post_webhook(
+            "企业微信",
+            self._webhook,
+            {"msgtype": "text", "text": {"content": f"【MineWorker】{title}：{message}"}},
+        )
 
 
 class EmailNotifier:
@@ -67,6 +149,12 @@ def build_notifiers() -> list[Notifier]:
     notifiers: list[Notifier] = [LogNotifier()]
     if setting.WARNING_FEISHU_WEBHOOK:
         notifiers.append(FeishuNotifier(setting.WARNING_FEISHU_WEBHOOK))
+    if setting.WARNING_DINGTALK_WEBHOOK:
+        notifiers.append(
+            DingTalkNotifier(setting.WARNING_DINGTALK_WEBHOOK, setting.WARNING_DINGTALK_SECRET)
+        )
+    if setting.WARNING_WECHAT_WEBHOOK:
+        notifiers.append(WeChatWorkNotifier(setting.WARNING_WECHAT_WEBHOOK))
     if setting.WARNING_EMAIL.get("host"):
         notifiers.append(EmailNotifier(setting.WARNING_EMAIL))
     return notifiers
