@@ -101,7 +101,13 @@ class BaseScheduler:
         """teardown 末尾调用。"""
 
     def _on_failed_request(self, request: Request) -> None:
-        """某请求重试耗尽后调用（在 failed_request 钩子之后）。默认无操作。"""
+        """某请求重试耗尽后调用（在 failed_request 钩子之后）。
+
+        落到 `FAILED_REQUEST_PATH`，等 ``mineworker retry --requests`` 回放。
+        以前这里是空实现 —— 单机模式下重试耗尽的请求就那样消失了，
+        而那个文件的既定用途正是装这些请求（分布式模式一直推进 Redis 失败列表）。
+        """
+        self._append_requests([request], "重试耗尽")
 
     # ------------------------------------------------------------------
     def run(self) -> None:
@@ -147,7 +153,16 @@ class BaseScheduler:
         只记日志是不够的：日志会滚掉，而这些请求此刻是**唯一副本** ——
         它们既不在队列里、也不在缓冲区里了。
         """
-        if not requests or not setting.DUMP_UNFINISHED_ON_EXIT:
+        if not setting.DUMP_UNFINISHED_ON_EXIT:
+            return
+        self._append_requests(requests, why)
+
+    def _append_requests(self, requests: list[Request], why: str) -> None:
+        """追加写入 `FAILED_REQUEST_PATH`。
+
+        只记日志是不够的：日志会滚掉，而这些请求此刻是**唯一副本**。
+        """
+        if not requests:
             return
         path = Path(setting.FAILED_REQUEST_PATH)
         try:

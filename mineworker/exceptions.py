@@ -62,6 +62,15 @@ class ProxyUnavailableError(RequestError):
     """
 
 
+class UserUnavailableError(RequestError):
+    """账号池里一个可用账号都没有（通常是全被拉黑了）。
+
+    **不匿名发出去**：需要登录的站会回一张登录墙，而那张页面会被当成数据存进库。
+    这是「我们自己的账号供应问题」，不是「目标站不健康」，所以不计入熔断。
+    确实想要「有号更好、没号也能抓」，把 ``USER_POOL_ALLOW_ANONYMOUS`` 打开。
+    """
+
+
 class ResponseError(MineWorkerError):
     """响应内容异常（解析失败、非预期结构等）。"""
 
