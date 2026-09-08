@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **停止渲染池时，队列里排着的请求会让调用线程永久挂起。** `submit()` 的
+  `job.event.wait()` 没有超时，而 `close()` 只给 worker 置停止位、塞一个哨兵，
+  **不排空队列** —— worker 一看见停止位就退出，剩下的任务永远不会被收尾。
+
+    实测（1 个在渲染、4 个排队时关闭）：**4 个调用线程永久挂起**。
+    这直接打在优雅停止上：worker 卡在 `event.wait()` 里，`stop()` 它不看、
+    `join()` 它不动，而 `close_default_downloaders()` 还排在 worker join 之后。
+
+    现在 `close()` 会排空队列并把排队中的任务收尾成失败（调用方拿到 `RequestError`，
+    重试用尽后落进 `failed_requests.jsonl`）；`submit()` 的等待也加了上限作为兜底，
+    防「worker 不在了却没人收尾」。修复后同场景挂起 **0** 个。
+
 ## [0.13.0] - 2026-09-08
 
 ### 修复

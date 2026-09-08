@@ -35,14 +35,31 @@ Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']}
 _BLOCKED_RESOURCES = frozenset({"image", "media", "font"})
 
 
+#: `submit()` 兜底等待在渲染超时之上再留的余量（秒）。
+#: 主修复是关闭时排空队列；这里只防「worker 不在了却没人收尾」。
+_WAIT_MARGIN = 30.0
+
+
 class _Job:
     __slots__ = ("error", "event", "request", "response")
+
 
     def __init__(self, request: Request) -> None:
         self.request = request
         self.event = threading.Event()
         self.response: Response | None = None
         self.error: BaseException | None = None
+
+    def fail(self, exc: BaseException) -> None:
+        """收尾一个没能完成的任务。
+
+        排空和 worker 退出是并发的 —— worker 可能正好取走了这个 job。
+        `Event.is_set()` 让收尾只生效一次，后到的那次不会覆盖已有结果。
+        """
+        if self.event.is_set():
+            return
+        self.error = exc
+        self.event.set()
 
 
 class _RenderWorker(threading.Thread):
@@ -201,7 +218,11 @@ class _RenderPool:
         self._ensure_started()
         job = _Job(request)
         self._jobs.put(job)
-        job.event.wait()
+        # 兜底：worker 被杀、浏览器卡死、或者哪条路径漏了 set()，
+        # 都不该让调用者永远等下去。上限取渲染超时 + 余量 ——
+        # 比渲染本身的超时短的话，正常的慢渲染会被误判成失败
+        if not job.event.wait(timeout=float(self._config["timeout"]) * 2 + _WAIT_MARGIN):
+            job.fail(RuntimeError("等待渲染结果超时，渲染线程可能已经不在了"))
         if job.error is not None:
             raise RequestError(f"渲染失败 {request.url}：{job.error!r}") from job.error
         assert job.response is not None
@@ -219,6 +240,25 @@ class _RenderPool:
                 worker.join(timeout=10)
             self._workers.clear()
             self._started = False
+            # worker 一看见停止位就退出，队列里剩下的任务不会有人再碰它们 ——
+            # 而它们的调用线程正等在 job.event 上。不收尾的话那些线程永远醒不来：
+            # 实测 1 个在渲染、4 个排队时关闭，4 个调用线程永久挂起
+            self._drain()
+
+    def _drain(self) -> None:
+        """把队列里没人处理的任务收尾掉，让它们的调用者拿到一个失败。"""
+        stranded = 0
+        while True:
+            try:
+                job = self._jobs.get_nowait()
+            except queue.Empty:
+                break
+            if job is None:
+                continue
+            job.fail(RuntimeError("渲染池已关闭，这个请求没能开始渲染"))
+            stranded += 1
+        if stranded:
+            log.warning("渲染池关闭，{} 个排队中的请求未渲染（调用方会收到失败）", stranded)
 
 
 class PlaywrightDownloader(Downloader):
