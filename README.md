@@ -9,7 +9,7 @@
 一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> **0.10.4** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
+> **0.11.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
 > 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/mineworker/anti-bot/)。
 > 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/mineworker/roadmap/)。
 
@@ -71,15 +71,16 @@ python examples/books_toscrape.py   # 两级抓取：列表页翻页 → 详情�
 | 运行时 | 单进程多线程、优先级队列、结束检测、`Ctrl-C` 优雅排空、崩溃 dump + `retry` 回放 |
 | 网络 | `Request`/`Response`（httpx + parsel）、自动重试、`validate`/`failed_request` 钩子、随机 UA、会话复用 |
 | 礼貌性 | `robots.txt`（含 `Crawl-delay`）、per-domain 限速 + 单域并发上限、**跨节点全局限速**（Redis）、429/503 读 `Retry-After` 整域降速 |
-| 稳健性 | 状态码策略（错误页不当数据入库）、指数退避 + 抖动、同域连续失败熔断、运行时长上限、**响应体大小上限 + Content-Type 白名单**、`SIGINT`/`SIGTERM` 优雅停止（分布式下把已领取任务推回队列） |
+| 稳健性 | 状态码策略（错误页不当数据入库）、指数退避 + 抖动、同域连续失败熔断、运行时长上限、响应体大小上限 + Content-Type 白名单、`SIGINT`/`SIGTERM` 优雅停止、**任务租约**（节点被硬杀也能回收） |
 | 分布式 | `Spider`：Redis 队列 + 布隆去重 + 断点续爬 + 种子一次性锁 + 多节点心跳结束检测 |
 | 任务驱动 | `TaskSpider` 从任务源持续消费；`BatchSpider` 周期批次采集（任务表状态机 + 进度追踪 + 防丢） |
 | 数据 | `Item`/`UpdateItem`、`Pipeline`（Console/CSV/MongoDB/MySQL/PostgreSQL/Elasticsearch/Kafka）、请求级 + Item 级去重（布隆/精确） |
 | 渲染 | `Request(render=True)` —— Playwright 渲染池、`wait_for`/`render_time`/`render_script` |
 | 反爬 | TLS / HTTP2 指纹伪装（`impersonate` 真实浏览器）、Cloudflare / Akamai 挑战页识别 |
 | 扩展 | 下载中间件链、代理池接口、账号 / Cookie 池（掉登录自动换号） |
-| 观测 | Prometheus exporter、卡死/失败率告警（飞书/邮件）、`debug=True` |
-| 工具 | `mineworker create/shell/retry`，`create -i --table` 读表结构反射生成 Item |
+| 观测 | Prometheus exporter、卡死/失败率告警（**飞书 / 钉钉 / 企业微信 / 邮件**，发送失败会记录）、`debug=True` |
+| 开发体验 | **响应缓存**（重跑读本地文件，不再反复打目标站） |
+| 工具 | `mineworker create/shell/retry/cache`，`create -i --table` 读表结构反射生成 Item |
 
 ## 开发
 

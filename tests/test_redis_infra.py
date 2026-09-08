@@ -146,3 +146,31 @@ def test_dedup_unknown_still_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(setting, "DEDUP_FILTER", "bogus")
     with pytest.raises(ConfigError):
         Dedup()
+
+
+def test_queue_without_lease_does_not_need_lua(monkeypatch) -> None:
+    """`SPIDER_TASK_LEASE = 0` 必须是一条**真的**退路。
+
+    租约要用 Lua 保证「取走 + 记账」原子，而有些托管 / 代理型 Redis 会禁用脚本。
+    关掉租约却仍然走脚本的话，这条退路等于不存在 —— 那些部署会直接崩在
+    `unknown command 'evalsha'`。
+    """
+    import fakeredis  # 这个夹具里的 fakeredis 没装 lupa，正好当「不支持 Lua」用
+
+    from mineworker import setting
+    from mineworker.core.task_queue import RedisTaskQueue
+    from mineworker.network.request import Request
+
+    monkeypatch.setattr(setting, "SPIDER_TASK_LEASE", 0.0)
+    client = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(client, "register_script", _boom)
+    queue = RedisTaskQueue("nolua", client)
+    for i in range(3):
+        queue.put(Request(f"http://a/{i}"))
+
+    assert len(queue.get_batch(5)) == 3
+    assert queue.reclaim_expired() == 0, "关掉租约后不该再去回收"
+
+
+def _boom(*_a, **_k):
+    raise AssertionError("关掉租约后不该再调用 Lua 脚本")
