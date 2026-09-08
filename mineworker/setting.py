@@ -75,6 +75,16 @@ REQUEST_BUFFER_MAX_CACHED: int = 1000  # RequestBuffer 达到此量立即 flush
 BUFFER_FLUSH_INTERVAL: float = 0.1  # RequestBuffer / ItemBuffer flush 轮询间隔
 DONE_CHECK_TIMES: int = 3  # 结束检测连续复查次数
 DONE_CHECK_INTERVAL: float = 0.5  # 每次复查间隔（秒）
+# 启动宽限：节点在**从没拿到过任何任务**之前，至少要等这么久才允许判定「抓完了」。
+#
+# 多节点同时启动时只有一个能拿到种子锁，其余节点看到的是空队列 —— 而默认
+# DONE_CHECK_TIMES × DONE_CHECK_INTERVAL 只有 1.5 秒，播种节点那时往往还没把种子
+# 推进队列。心跳也挡不住：播种节点在那一刻的 pending 同样是 0，它自己还没开始拉活。
+# 实测两个容器同秒启动，第二个节点 1 秒后就退出、0 个请求 —— 配 N 个节点
+# 实际只有 1 个在干活，而且没有任何报错。
+#
+# 只有「一个任务都没见过」的节点付这个等待成本；拿到过活之后就按原规则判定。
+SPIDER_STARTUP_GRACE: float = 10.0
 DUMP_UNFINISHED_ON_EXIT: bool = True  # 中断退出时把未完成请求 dump 到 FAILED_REQUEST_PATH
 
 # ---- 请求 ----
