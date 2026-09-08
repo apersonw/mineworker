@@ -12,12 +12,14 @@ spawn，子进程会重新 import 本模块，闭包和局部类没法 pickle。
 
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import os
 import signal
 import time
 from collections import Counter
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -83,6 +85,27 @@ def _serve_timed(server: HTTPServer, hits: Any) -> None:
 
 
 # ---- 顶层定义，供子进程 spawn 后重新 import ---------------------------
+class SlowFilePipeline:
+    """落库靶子。慢是**关键**：真实的库批量写入要花时间（MySQL 批插 ~1 秒很常见），
+    而销账早于落库的洞恰恰是在这段时间里张开的。先 sleep 再写 ——
+    真库写到一半被硬杀是不会提交的。"""
+
+    def save_items(self, table: str, items: list[dict[str, Any]]) -> bool:
+        import json
+        import os
+
+        time.sleep(float(os.environ.get("MW_TEST_PIPE_DELAY", "0")))
+        with Path(os.environ["MW_TEST_STORE"]).open("a") as f:
+            for it in items:
+                f.write(json.dumps(it) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        return True
+
+    def close(self) -> None:
+        return None
+
+
 def _run_node(
     seed_url: str,
     redis_url: str,
@@ -91,6 +114,7 @@ def _run_node(
     delay: float = 0.0,
     global_throttle: bool = False,
     lease: float | None = None,
+    store: bool = False,
 ) -> None:
     """一个「节点」：独立进程里跑一个 Spider。
 
@@ -102,7 +126,7 @@ def _run_node(
     from mineworker.utils import log
 
     setting.REDIS_URL = redis_url
-    setting.ITEM_PIPELINES = []
+    setting.ITEM_PIPELINES = [f"{__name__}.SlowFilePipeline"] if store else []
     setting.LOG_LEVEL = "CRITICAL"
     setting.DONE_CHECK_INTERVAL = 0.2
     setting.DONE_CHECK_TIMES = 3
@@ -134,7 +158,8 @@ def _run_node(
                 yield mw.Request(response.urljoin(href), callback=self.parse_page)
 
         def parse_page(self, request, response):  # type: ignore[no-untyped-def]
-            return None
+            if store:
+                yield {"url": request.url}
 
     NodeSpider(redis_key=redis_key).start()
 
@@ -501,3 +526,66 @@ def test_sigkilled_node_tasks_are_reclaimed(httpserver: HTTPServer, clean_redis:
 
     pages = {p: c for p, c in counted.items() if p.startswith("/p/")}
     assert len(pages) == PAGES, f"漏抓：只见到 {len(pages)}/{PAGES} —— 被硬杀节点领走的任务没能回收"
+
+
+# ---- 硬杀之后的数据恢复（落库之后才销账）-----------------------------
+def test_sigkilled_node_does_not_lose_scraped_data(
+    httpserver: HTTPServer, clean_redis: str, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """节点被 SIGKILL 硬杀后，它**已经抓到手的数据**必须也能落库。
+
+    上面那条用例验的是**任务**回来了，判据取自靶子（每页恰好一次）——
+    而它和其余全部分布式用例一样写着 `ITEM_PIPELINES = []`，
+    **数据这条路从来没被验过**。
+
+    实测（400 页、管道每批 1.5 秒）：靶子确实发出全部 400 页、爬虫 exitcode=0
+    报告抓完，**只落库 340 行**。少掉的 60 行重跑一遍一行都补不回来 ——
+    请求指纹是入队前写的，新节点看一眼去重就跳过了。
+
+    根因是顺序：worker 在 `finally` 里销账，那一刻 item 还只在内存缓冲里。
+    """
+    store = tmp_path / "store.jsonl"
+    store.touch()
+    monkeypatch.setenv("MW_TEST_STORE", str(store))
+    monkeypatch.setenv("MW_TEST_PIPE_DELAY", "0.6")
+
+    key = f"data{os.getpid()}"
+    with mp.Manager() as mgr:
+        hits = mgr.list()
+        _serve(httpserver, hits, page_delay=0.2)
+        url = httpserver.url_for("/seed")
+
+        first = mp.Process(
+            target=_run_node,
+            args=(url, clean_redis, key),
+            kwargs={"lease": 2.0, "store": True},
+            daemon=False,
+        )
+        first.start()
+        time.sleep(1.5)
+        os.kill(first.pid, signal.SIGKILL)
+        first.join(timeout=30)
+
+        fetched_at_kill = len({p for p in list(hits) if p.startswith("/p/")})
+        assert 0 < fetched_at_kill < PAGES, (
+            f"被杀时抓了 {fetched_at_kill}/{PAGES} 页 —— 节点没在「抓了一半」时被杀，"
+            "这个用例什么都没验到"
+        )
+
+        second = mp.Process(
+            target=_run_node,
+            args=(url, clean_redis, key),
+            kwargs={"lease": 2.0, "store": True},
+            daemon=False,
+        )
+        second.start()
+        _join_all([second])
+        pages = {p for p in list(hits) if p.startswith("/p/")}
+
+    stored = {json.loads(line)["url"] for line in store.read_text().splitlines() if line.strip()}
+    assert len(pages) == PAGES, f"漏抓：只见到 {len(pages)}/{PAGES}"
+    assert len(stored) == PAGES, (
+        f"靶子发出了 {len(pages)} 页，只有 {len(stored)} 行落库 —— "
+        f"少掉的 {PAGES - len(stored)} 条数据永久丢失："
+        "任务已销账不会被回收，请求指纹又是入队前写的，重跑也补不回来"
+    )

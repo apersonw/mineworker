@@ -4,6 +4,11 @@
 → Item 级去重（fingerprint）→ 逐管道 ``save_items`` / ``update_items``
 → 成功则写去重指纹；失败则 dump 到 ``FAILED_ITEM_PATH``。
 
+**落库之后才给任务销账**：每条 item 记着产出它的那条请求（``owner``），一批写完
+（入库成功、或 dump 进 failed_items —— 两者都落到了持久介质）才回调 ``ack``。
+销账早于落库的话，节点被硬杀就会**静默丢数据**：数据只在内存里，而任务已经
+销过账不会被回收，请求指纹又是入队前就写的，重跑一遍也补不回来。
+
 给了 ``handler`` 时走调试快路径：直接把原始批次交给 handler，不去重、不落库。
 """
 
@@ -62,6 +67,7 @@ class ItemBuffer(threading.Thread):
         handler: ItemHandler | None = None,
         pipelines: list[str] | None = None,
         dedup: Dedup | None = None,
+        ack: Callable[[Any], None] | None = None,
     ) -> None:
         super().__init__(name="item-buffer", daemon=True)
         self._stats = stats
@@ -69,14 +75,17 @@ class ItemBuffer(threading.Thread):
         self._pipeline_paths = pipelines
         self._pipeline_cache: dict[tuple[str, ...], list[BasePipeline]] = {}
         self._dedup = dedup
-        self._pending: list[Any] = []
+        #: 落库成功后给任务销账。分布式下就是 ``Collector.done``
+        self._ack = ack
+        #: (item, 产出它的请求) —— owner 为 None 表示没人等着它销账
+        self._pending: list[tuple[Any, Any]] = []
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
 
     # ------------------------------------------------------------------
-    def put(self, item: Any) -> None:
+    def put(self, item: Any, owner: Any = None) -> None:
         with self._lock:
-            self._pending.append(item)
+            self._pending.append((item, owner))
             size = len(self._pending)
         if size >= setting.ITEM_MAX_CACHED_COUNT:
             self.flush()
@@ -113,11 +122,32 @@ class ItemBuffer(threading.Thread):
             self._pending = []
         if not batch:
             return
+        objs = [obj for obj, _ in batch]
+        # 同一条请求可能产出多条 item，按 id 去重后只销一次账
+        owners = {id(owner): owner for _, owner in batch if owner is not None}
         if self._handler is not None:
-            self._handler(batch)
-            self._stats.incr(sk.ITEM, len(batch))
+            self._handler(objs)
+            self._stats.incr(sk.ITEM, len(objs))
+            self._ack_all(owners.values())
             return
-        self._persist(batch)
+        try:
+            self._persist(objs)
+        except Exception:
+            # 销账早于落库正是这个模块要堵的洞，所以这里**不能**销账。
+            # 不销账的任务会在租约到期后被别的节点重抓 —— 数据至少还有第二次机会。
+            # 顺带保住 flush 线程：以前这里一抛，整个 ItemBuffer 线程就悄悄死了
+            log.exception("落库异常，本批 {} 条不销账，等租约到期重抓", len(objs))
+            return
+        self._ack_all(owners.values())
+
+    def _ack_all(self, owners: Any) -> None:
+        if self._ack is None:
+            return
+        for owner in owners:
+            try:
+                self._ack(owner)
+            except Exception:
+                log.exception("任务销账失败")
 
     def _persist(self, batch: list[Any]) -> None:
         dedup = self._get_dedup()

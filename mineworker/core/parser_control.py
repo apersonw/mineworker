@@ -63,6 +63,8 @@ class ParserWorker(threading.Thread):
         self._failed_sink = failed_sink
         self._stop_event = threading.Event()
         self.busy = False
+        #: 本条请求产出过 item —— 销账权已经交给 ItemBuffer，等它落库
+        self._deferred = False
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -75,14 +77,21 @@ class ParserWorker(threading.Thread):
                 self.busy = False
                 continue
             self.busy = True
+            self._deferred = False
             try:
                 self._process(request)
             except Exception:
                 log.exception("worker 未捕获异常")
             finally:
                 # 放在 finally 里：处理过程中抛什么异常都要销账，否则这条任务会挂在
-                # 在途表里直到租约到期被重抓一遍
-                self._collector.done(request)
+                # 在途表里直到租约到期被重抓一遍。
+                #
+                # 但产出过 item 的请求例外 —— 那时数据**还只在内存缓冲里**。
+                # 这里销账等于宣布「这条干完了」，节点一被硬杀数据就没了：
+                # 任务不会被回收（已销账），指纹又是入队前写的，重跑也补不回来。
+                # 它的账由 ItemBuffer 在落库之后销。
+                if not self._deferred:
+                    self._collector.done(request)
                 self.busy = False
 
     # ------------------------------------------------------------------
@@ -140,7 +149,7 @@ class ParserWorker(threading.Thread):
         callback = self._resolve_callback(request)
         try:
             # 生成器回调的异常会在迭代时才抛出，因此调用与分发放在同一 try 内
-            self._dispatch(callback(request, response, **request.cb_kwargs))
+            self._dispatch(callback(request, response, **request.cb_kwargs), request)
         except NotRetryError:
             self._drop(request)
             return
@@ -209,7 +218,7 @@ class ParserWorker(threading.Thread):
             raise SpiderError(f"找不到回调方法 {cb!r}（parser={type(self._parser).__name__}）")
         return cast("_Callback", method)
 
-    def _dispatch(self, results: Iterable[Any] | None) -> None:
+    def _dispatch(self, results: Iterable[Any] | None, owner: Request) -> None:
         if results is None:
             return
         for obj in results:
@@ -218,7 +227,10 @@ class ParserWorker(threading.Thread):
             elif callable(obj):
                 obj()
             else:
-                self._item_buffer.put(obj)
+                self._item_buffer.put(obj, owner=owner)
+                # 放在 put 之后：put 要是抛了，没有 item 进缓冲，
+                # 这条请求就该走 finally 里的正常销账
+                self._deferred = True
 
     # ------------------------------------------------------------------
     def _retry_or_fail(
@@ -275,7 +287,7 @@ class ParserWorker(threading.Thread):
             request.retry_times,
         )
         try:
-            self._dispatch(self._parser.failed_request(request, response))
+            self._dispatch(self._parser.failed_request(request, response), request)
         except Exception:
             log.exception("failed_request 钩子异常")
         if self._failed_sink is not None:
