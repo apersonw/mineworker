@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from mineworker import setting
+from mineworker.core import context
 from mineworker.exceptions import (
     ContentTypeRejectedError,
     HttpStatusError,
@@ -146,7 +147,10 @@ class ParserWorker(threading.Thread):
 
         callback = self._resolve_callback(request)
         try:
-            # 生成器回调的异常会在迭代时才抛出，因此调用与分发放在同一 try 内
+            # 生成器回调的异常会在迭代时才抛出，因此调用与分发放在同一 try 内。
+            # 上下文覆盖整个 dispatch：用户在回调里调 update_task 时，
+            # 框架要能知道当前处理的是哪个请求
+            context.set_current(request, self._item_buffer)
             self._dispatch(callback(request, response, **request.cb_kwargs), request)
         except NotRetryError:
             self._drop(request)
@@ -155,6 +159,8 @@ class ParserWorker(threading.Thread):
             self._stats.incr(sk.PARSE_ERROR)
             self._retry_or_fail(request, response, exc, reason="解析异常")
             return
+        finally:
+            context.set_current(None, None)
 
         self._stats.incr(sk.REQUEST_OK)
         # 成功即清零该域的连续失败计数（熔断只认「连续」）
