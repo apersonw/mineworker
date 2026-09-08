@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import ssl
 import threading
+import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from mineworker import setting
-from mineworker.exceptions import ContentTypeRejectedError, ResponseTooLargeError
+from mineworker.exceptions import (
+    ContentTypeRejectedError,
+    ProxyUnavailableError,
+    ResponseTooLargeError,
+)
 from mineworker.network.proxy_pool import get_proxy_pool
 from mineworker.network.user_agent import get_random_user_agent
 
@@ -50,14 +56,74 @@ def ssl_context_for(verify: Any) -> Any:
     return cached
 
 
-def pick_proxy(request: Request, fallback: str | None = None) -> str | None:
-    """请求显式指定 > 下载器固定代理 > 代理池。"""
+def _attempt_proxy(request: Request, fallback: str | None) -> tuple[str | None, bool]:
+    """一次尝试。返回 (代理, 是否该再等等)。
+
+    判定逻辑只写这一份 —— 同步和异步两条路径只有「怎么等」不同，
+    复制两份判定迟早会分叉。
+    """
     rk = request.requests_kwargs
     explicit = rk.get("proxy") or rk.get("proxies") or fallback
     if explicit:
-        return explicit
+        return explicit, False
     pool = get_proxy_pool()
-    return pool.get_proxy() if pool is not None else None
+    if pool is None:
+        return None, False  # 压根没开代理池，直连本来就是行为
+    proxy = pool.get_proxy()
+    if proxy or setting.PROXY_ALLOW_DIRECT:
+        return proxy, False
+    return None, True
+
+
+def _no_proxy_error(request: Request) -> ProxyUnavailableError:
+    return ProxyUnavailableError(
+        f"代理池取不到代理（等了 {setting.PROXY_WAIT_TIMEOUT} 秒），"
+        f"不回退直连：{request.method} {request.url}。"
+        "确实想要「有代理就用、没有就直连」的话，把 PROXY_ALLOW_DIRECT 打开"
+    )
+
+
+def _proxy_gap() -> float:
+    """两次重取之间歇多久 —— 比取号接口的最小间隔更密没有意义。"""
+    return max(setting.PROXY_MIN_INTERVAL, 0.1)
+
+
+def pick_proxy(request: Request, fallback: str | None = None) -> str | None:
+    """请求显式指定 > 下载器固定代理 > 代理池。
+
+    开着代理池却取不到代理时**不回退直连** —— 那会把源 IP 暴露给目标站，
+    而开代理池的全部意义就是别这么干。先有界等待并重取
+    （供应商短暂断供不至于把任务的重试次数耗光），到点仍拿不到才抛。
+    """
+    deadline: float | None = None
+    while True:
+        proxy, wait = _attempt_proxy(request, fallback)
+        if not wait:
+            return proxy
+        if deadline is None:
+            deadline = time.monotonic() + setting.PROXY_WAIT_TIMEOUT
+        if time.monotonic() >= deadline:
+            raise _no_proxy_error(request)
+        # 等在池的锁**之外**：睡在锁里的话所有线程会一起卡在锁上
+        time.sleep(_proxy_gap())
+
+
+async def apick_proxy(request: Request, fallback: str | None = None) -> str | None:
+    """`pick_proxy` 的异步版。
+
+    异步下载器里不能用阻塞式 sleep —— 那会把整个事件循环卡住，
+    其它并发请求跟着一起停。
+    """
+    deadline: float | None = None
+    while True:
+        proxy, wait = _attempt_proxy(request, fallback)
+        if not wait:
+            return proxy
+        if deadline is None:
+            deadline = time.monotonic() + setting.PROXY_WAIT_TIMEOUT
+        if time.monotonic() >= deadline:
+            raise _no_proxy_error(request)
+        await asyncio.sleep(_proxy_gap())
 
 
 def report_bad_proxy(proxy: str) -> None:
