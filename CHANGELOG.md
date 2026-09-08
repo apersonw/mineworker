@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **写库失败的 `UpdateItem` 经 `retry --items` 回放后，那次更新会被静默丢弃 ——
+  而 retry 报告成功并删掉了文件。** `_dump_failed` 只记 `table` + `data`，
+  `update_keys` 和逐条的 `pipelines` 路由都丢了；`retry_items` 于是无条件走
+  `save_items`，即 INSERT 而非 UPSERT；PostgreSQL 默认的 `ON CONFLICT DO NOTHING`
+  让这条 INSERT **什么都不做并返回成功**；retry 据此报告「成功 1，仍失败 0」、
+  删除文件 —— 那是最后一份副本。
+
+    真库实测：回放后库里仍是 `旧标题/1`，而期望是 `新标题/99`。
+    每一环都按自己的契约正确工作，合起来是静默、永久、还报告成功的丢失。
+    0.11.1 刚把「dump 也算持久介质，可以销账」写成保证，这条退路本身却是有损的。
+
+    现在 dump 带上 `update_keys` 与 `pipelines`，回放按记录路由；
+    没有这些字段的旧文件按普通插入处理。管道没实现 `update_items` 时那一组算失败
+    留在文件里，不会让整个回放崩掉。
+
 ## [0.11.1] - 2026-09-08
 
 ### 修复

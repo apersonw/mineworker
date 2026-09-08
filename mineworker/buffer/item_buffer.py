@@ -177,7 +177,12 @@ class ItemBuffer(threading.Thread):
                         if row.fingerprint is not None:
                             dedup.add(row.fingerprint)
             else:
-                self._dump_failed(table, datas)
+                self._dump_failed(
+                    table,
+                    datas,
+                    update_keys=update_keys if is_update else None,
+                    pipelines=pipe_paths,
+                )
 
     # ------------------------------------------------------------------
     def _get_dedup(self) -> Dedup | None:
@@ -219,10 +224,30 @@ class ItemBuffer(threading.Thread):
             log.exception("管道 {} 写入异常", type(pipeline).__name__)
             return False
 
-    def _dump_failed(self, table: str, datas: list[dict[str, Any]]) -> None:
+    def _dump_failed(
+        self,
+        table: str,
+        datas: list[dict[str, Any]],
+        *,
+        update_keys: list[str] | None = None,
+        pipelines: tuple[str, ...] | None = None,
+    ) -> None:
+        """把写失败的一批落到磁盘，**带上回放所需的全部信息**。
+
+        只记 table + data 是不够的：`UpdateItem` 回放时会退化成普通 INSERT，
+        而 PG 默认 `ON CONFLICT DO NOTHING` 会让这条 INSERT 什么都不做**并返回成功** ——
+        于是 retry 报告成功、删掉文件，那次更新永久消失。
+
+        字段是可选的：老的 dump 文件没有它们，读的时候按普通插入处理（即今天的行为）。
+        """
         path = Path(setting.FAILED_ITEM_PATH)
+        extra: dict[str, Any] = {}
+        if update_keys:
+            extra["update_keys"] = list(update_keys)
+        if pipelines:
+            extra["pipelines"] = list(pipelines)
         with path.open("a", encoding="utf-8") as fh:
             for data in datas:
-                fh.write(tools.dumps_json({"table": table, "data": data}) + "\n")
+                fh.write(tools.dumps_json({"table": table, "data": data, **extra}) + "\n")
         self._stats.incr(sk.ITEM_FAILED, len(datas))
         log.error("[{}] {} 条数据写入失败，已 dump 到 {}", table, len(datas), path)
