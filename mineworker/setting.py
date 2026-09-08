@@ -172,6 +172,11 @@ PROXY_POOL: str = "mineworker.network.proxy_pool.api.ApiProxyPool"
 PROXY_EXTRACT_API: str = ""  # 返回代理的 URL（每行一个，或 JSON 数组）
 PROXY_MAX_USE_TIMES: int = 100  # 单个代理最多用多少次后轮换
 PROXY_MIN_INTERVAL: float = 1.0  # 两次抓取代理列表的最小间隔（秒）
+# 池空时最多等多久（秒）—— 供应商短暂断供期间不至于把任务耗完重试次数丢掉
+PROXY_WAIT_TIMEOUT: float = 30.0
+# 等不到代理时是否允许直连。默认 False：静默直连会把源 IP 暴露给目标站，
+# 而那正是开代理池要避免的。设成 True 就是明确接受「有代理就用、没有就直连」
+PROXY_ALLOW_DIRECT: bool = False
 
 # ---- Item / 管道 ----
 ITEM_MAX_CACHED_COUNT: int = 5000  # ItemBuffer 达到此量立即 flush

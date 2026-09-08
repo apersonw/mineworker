@@ -53,6 +53,15 @@ class AntiBotError(RequestError):
     """
 
 
+class ProxyUnavailableError(RequestError):
+    """开着代理池却拿不到代理。
+
+    **不回退直连**：那会让请求从源 IP 打出去，而开代理池的全部意义就是别这么干。
+    这是「我们自己的供应问题」，不是「目标站不健康」，所以不计入熔断。
+    真想要「有代理就用、没有就直连」，把 ``PROXY_ALLOW_DIRECT`` 打开。
+    """
+
+
 class ResponseError(MineWorkerError):
     """响应内容异常（解析失败、非预期结构等）。"""
 

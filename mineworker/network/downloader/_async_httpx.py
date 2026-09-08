@@ -20,8 +20,8 @@ import httpx
 from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
+    apick_proxy,
     check_content_type,
-    pick_proxy,
     read_capped,
     report_bad_proxy,
     send_kwargs,
@@ -107,7 +107,7 @@ class AsyncHttpxDownloader(Downloader):
     async def _download(self, request: Request) -> Response:
         assert self._client is not None and self._sem is not None
         kwargs = send_kwargs(request, self._timeout)
-        proxy = pick_proxy(request, None)
+        proxy = await apick_proxy(request, None)
         verify = request.requests_kwargs.get("verify", self._verify)
         cookies = request.requests_kwargs.get("cookies")
 
