@@ -9,7 +9,7 @@
 一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> **0.12.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
+> **0.13.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
 > 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/mineworker/anti-bot/)。
 > 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/mineworker/roadmap/)。
 
@@ -77,7 +77,7 @@ python examples/books_toscrape.py   # 两级抓取：列表页翻页 → 详情�
 | 数据 | `Item`/`UpdateItem`、`Pipeline`（Console/CSV/MongoDB/MySQL/PostgreSQL/Elasticsearch/Kafka）、请求级 + Item 级去重（布隆/精确） |
 | 渲染 | `Request(render=True)` —— Playwright 渲染池、`wait_for`/`render_time`/`render_script` |
 | 反爬 | TLS / HTTP2 指纹伪装（`impersonate` 真实浏览器）、Cloudflare / Akamai 挑战页识别 |
-| 扩展 | 下载中间件链、**代理池**（耗尽时不会悄悄直连）、账号 / Cookie 池（掉登录自动换号） |
+| 扩展 | 下载中间件链、**代理池 / 账号池**（耗尽时不会悄悄降级成直连或匿名）、掉登录自动换号 |
 | 观测 | Prometheus exporter、卡死/失败率告警（**飞书 / 钉钉 / 企业微信 / 邮件**，发送失败会记录）、`debug=True` |
 | 开发体验 | **响应缓存**（重跑读本地文件，不再反复打目标站） |
 | 工具 | `mineworker create/shell/retry/cache`，`create -i --table` 读表结构反射生成 Item |
