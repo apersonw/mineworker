@@ -54,6 +54,25 @@ class MemoryTaskQueue:
 
 log = get_logger("queue")
 
+#: 把一批还在本节点手里的任务的租约往后推，**一次往返**。
+#:
+#: 关键是 `XX`：只更新**已存在**的成员，绝不新增。
+#: 任务如果已经处理完销账、或已被别的节点回收走了，这里就该什么都不做 ——
+#: 不加 XX 的话会把它重新塞进在途表，于是两个节点同时被当成持有者，
+#: 那比不续期更糟。
+_RENEW_LUA = """
+local inflight = KEYS[1]
+local deadline = ARGV[1]
+local renewed = 0
+for i = 2, #ARGV do
+  if redis.call('ZADD', inflight, 'XX', 'CH', deadline, ARGV[i]) == 1 then
+    renewed = renewed + 1
+  end
+end
+return renewed
+"""
+
+
 #: 把租约到期的在途任务搬回队列，**原子**。
 #:
 #: 先 zrem 再 zadd 分两步做的话，中间崩掉任务就两头都不在了 ——
@@ -202,6 +221,34 @@ class RedisTaskQueue:
         if n:
             log.warning("有 {} 个任务的租约到期，已放回队列（节点可能被硬杀了）", n)
         return n
+
+    def renew(self, requests: list[Request]) -> int:
+        """把这些任务的租约往后推，返回实际续上的条数。
+
+        租约是**从领走那刻起算的**，而 collector 一次会领走 `COLLECTOR_TASK_COUNT`
+        个任务。每页处理得慢一点，排在后面的任务在被碰到之前租约就过期了 ——
+        节点全程健康却被判定「已死」，任务被别人抢去重抓一遍。
+        实测 5 个任务、每个处理 0.6 秒、租约 2 秒：被抢走 2 个。
+
+        后果不是丢数据（去重挡得住重复入库），而是**重复抓取** ——
+        目标站挨双倍流量，正好抵消这个框架主打的礼貌性。
+        """
+        lease = setting.SPIDER_TASK_LEASE
+        if lease <= 0 or not requests:
+            return 0
+        tokens = [r.lease_token for r in requests if getattr(r, "lease_token", None)]
+        if not tokens:
+            return 0
+        try:
+            renewed = self._r.register_script(_RENEW_LUA)(
+                keys=[self._inflight_key], args=[f"{time.time() + lease:.3f}", *tokens]
+            )
+        except Exception:
+            # 续期失败不该拖垮爬虫：最坏结果是任务被当成超时重抓一遍，
+            # 而那正是没有这个功能时的行为
+            log.debug("续期租约失败", exc_info=True)
+            return 0
+        return int(renewed)
 
     def inflight_count(self) -> int:
         return int(self._r.zcard(self._inflight_key))
