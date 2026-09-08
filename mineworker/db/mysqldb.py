@@ -45,6 +45,11 @@ class MysqlDB:
             charset=charset,
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=True,
+            # rowcount 按「匹配到几行」而不是「改了几行」计数 —— 与 PostgreSQL 一致。
+            # 默认口径下，UPDATE 一行已存在但值相同的记录会返回 0，
+            # 和「这行根本不存在」分不开；靠 rowcount 判断更新是否落地就会把
+            # 正常的幂等重写当成失败。
+            client_flag=pymysql.constants.CLIENT.FOUND_ROWS,
         )
 
     @classmethod

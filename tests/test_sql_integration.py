@@ -163,6 +163,16 @@ def test_mysql_without_on_duplicate_reports_failure(
 
 
 # ---- 失败数据 dump 一圈回放之后 ---------------------------------------
+def _point_settings_at_test_pg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """管道按 setting.POSTGRES_* 自己建连接，而夹具走的是 URL —— 对齐到同一个库。"""
+    parts = urlsplit(os.environ["MINEWORKER_TEST_POSTGRES_URL"])
+    monkeypatch.setattr(setting, "POSTGRES_HOST", parts.hostname or "localhost")
+    monkeypatch.setattr(setting, "POSTGRES_PORT", parts.port or 5432)
+    monkeypatch.setattr(setting, "POSTGRES_USER", parts.username or "postgres")
+    monkeypatch.setattr(setting, "POSTGRES_PASSWORD", parts.password or "")
+    monkeypatch.setattr(setting, "POSTGRES_DB", parts.path.lstrip("/") or "mineworker")
+
+
 class _RefusingPipeline:
     """写库失败 —— 这批会被 dump 到 failed_items。"""
 
@@ -207,13 +217,7 @@ def test_failed_update_survives_the_dump_round_trip(
     monkeypatch.setattr(
         setting, "ITEM_PIPELINES", ["mineworker.pipelines.postgres.PostgresPipeline"]
     )
-    # retry 会按 setting.POSTGRES_* 自己建连接，而夹具走的是 URL —— 对齐到同一个库
-    parts = urlsplit(os.environ["MINEWORKER_TEST_POSTGRES_URL"])
-    monkeypatch.setattr(setting, "POSTGRES_HOST", parts.hostname or "localhost")
-    monkeypatch.setattr(setting, "POSTGRES_PORT", parts.port or 5432)
-    monkeypatch.setattr(setting, "POSTGRES_USER", parts.username or "postgres")
-    monkeypatch.setattr(setting, "POSTGRES_PASSWORD", parts.password or "")
-    monkeypatch.setattr(setting, "POSTGRES_DB", parts.path.lstrip("/") or "mineworker")
+    _point_settings_at_test_pg(monkeypatch)
 
     pipe.save_items(TABLE, [{"url": "https://dump", "title": "旧标题", "score": 1}])
 
@@ -235,3 +239,81 @@ def test_failed_update_survives_the_dump_round_trip(
         f"回放之后库里还是 {row['title']!r}/{row['score']} —— 那次更新被静默丢弃了，"
         f"而 retry 报告「成功 {ok}，仍失败 {failed}」并删掉了文件（最后一份副本）"
     )
+
+
+# ---- UPDATE 没匹配到任何行 ---------------------------------------------
+def _check_update_miss(pipe: Any, db: Any, quoted: str) -> None:
+    """指向不存在记录的 UPDATE 必须算失败。
+
+    裸 UPDATE 匹配不到行时不报错、只影响 0 行。忽略这个数字的话，
+    数据没进库、不会 dump、去重指纹照记 —— 那条 URL 从此不会再被抓，
+    而统计里它是「成功 1 条」。
+    """
+    assert pipe.update_items(TABLE, [{"url": "https://nope", "title": "新"}], ["url"]) is False, (
+        "UPDATE 一行都没匹配到，却报告成功 —— 这条数据会被静默丢弃且永不重试"
+    )
+    assert not [r for r in _rows(db, quoted) if r["url"] == "https://nope"]
+
+
+def test_pg_update_miss_is_a_failure(pg: Any) -> None:
+    _check_update_miss(*pg)
+
+
+def test_mysql_update_miss_is_a_failure(my: Any) -> None:
+    _check_update_miss(*my)
+
+
+def _check_idempotent_update(pipe: Any, db: Any, quoted: str) -> None:
+    """值没变的重复 UPDATE 仍算成功。
+
+    pymysql 默认按「改了几行」计数，值相同时返回 0 —— 和「这行不存在」分不开。
+    不给连接加 `CLIENT.FOUND_ROWS` 的话，正常的幂等重写会被判成失败反复 dump，
+    比原来的缺陷更糟。PostgreSQL 按「匹配到几行」计数，本来就没这个问题。
+    """
+    pipe.save_items(TABLE, [{"url": "https://same", "title": "原值", "score": 1}])
+    assert pipe.update_items(TABLE, [{"url": "https://same", "title": "改了"}], ["url"]) is True
+    assert pipe.update_items(TABLE, [{"url": "https://same", "title": "改了"}], ["url"]) is True, (
+        "值没变的重复 UPDATE 被判成了失败 —— 正常的幂等重写会被反复 dump"
+    )
+    row = next(r for r in _rows(db, quoted) if r["url"] == "https://same")
+    assert row["title"] == "改了"
+
+
+def test_pg_idempotent_update_still_succeeds(pg: Any) -> None:
+    _check_idempotent_update(*pg)
+
+
+def test_mysql_idempotent_update_still_succeeds(my: Any) -> None:
+    _check_idempotent_update(*my)
+
+
+def test_update_miss_gets_dumped_instead_of_vanishing(
+    pg: Any, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """走完整的 ItemBuffer 路径：没匹配到的 UpdateItem 要能 dump 出来重试，
+    而且**不能记去重指纹** —— 记了这条 URL 就永远不会再被抓。"""
+    from mineworker.buffer.item_buffer import ItemBuffer
+    from mineworker.dedup import Dedup
+    from mineworker.utils.stats import Stats
+
+    _pipe, db, quoted = pg
+    dump = tmp_path / "failed.jsonl"
+    monkeypatch.setattr(setting, "FAILED_ITEM_PATH", str(dump))
+    monkeypatch.setattr(setting, "ITEM_FILTER_ENABLE", True)
+    _point_settings_at_test_pg(monkeypatch)
+
+    dedup = Dedup(filter_type="lite")
+    buf = ItemBuffer(
+        Stats(),
+        pipelines=["mineworker.pipelines.postgres.PostgresPipeline"],
+        dedup=dedup,
+    )
+    item = _PriceItem()
+    item.url, item.title, item.score = "https://ghost", "新标题", 7
+    fingerprint = item.fingerprint
+    buf.put(item)
+    buf.flush()
+
+    assert not [r for r in _rows(db, quoted) if r["url"] == "https://ghost"]
+    assert dump.exists(), "没匹配到的更新既没进库也没 dump —— 数据凭空消失了"
+    assert not dedup.get(fingerprint), "记了指纹，这条 URL 从此不会再被抓"

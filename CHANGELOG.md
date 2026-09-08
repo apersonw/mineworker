@@ -5,6 +5,24 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **`UpdateItem` 指向不存在的行时，SQL 管道报告成功而数据凭空消失。**
+  裸 `UPDATE` 匹配不到行不报错、只影响 0 行，而 `update_items` 忽略了这个数字。
+  真库实测：`update_items` 返回 `True`、表里 0 行、不 dump、
+  **去重指纹照记（这条 URL 从此不会再被抓）**、统计里算成功 1 条。
+
+    最扎眼的是首次运行：照着 Mongo（`update_one` upsert）/ ES（`doc_as_upsert`）
+    的语义写的 `UpdateItem` 爬虫，换到 SQL 上第一跑什么都没写进去，还报告成功。
+
+    现在没匹配到任何行算写入失败：整批 dump（可用 `retry --items` 回放），
+    日志点名具体的键，指纹不记。SQL 的 `UpdateItem` 仍是 `UPDATE` 而非 upsert ——
+    想要 upsert 用 `MYSQL_UPDATE_ON_DUPLICATE` 或 `POSTGRES_ON_CONFLICT="update"`。
+
+- MySQL 连接加上 `CLIENT.FOUND_ROWS`，`rowcount` 改为按「匹配到几行」计数，
+  与 PostgreSQL 一致。默认口径下值没变的 `UPDATE` 返回 0，和「这行不存在」分不开 ——
+  上一条会因此把正常的幂等重写反复判成失败。`MysqlDB.execute()` 的返回值语义随之改变。
+
 ## [0.11.2] - 2026-09-08
 
 ### 修复

@@ -202,6 +202,19 @@ dump 出来的每行**带着回放所需的全部信息**，而不只是表名�
 
 ## UpdateItem
 
+!!! warning "SQL 管道是 UPDATE，不是 upsert"
+    `MysqlPipeline` / `PostgresPipeline` 按 `__update_key__` 逐条 `UPDATE` ——
+    **目标行不存在时什么都不会发生**。而 Mongo 是 `update_one(upsert=True)`、
+    ES 是 `doc_as_upsert`，两者会把不存在的记录建出来。换库时要留意这个差异。
+
+    没匹配到任何行的那条会**算作写入失败**：整批 dump 到 `failed_items.jsonl`，
+    日志里点名具体的键，去重指纹不记（所以这条 URL 还会被重抓）。
+    早先的版本忽略影响行数、报告成功，数据就那样静默消失了。
+
+    想要「不存在就插入」，用 `MYSQL_UPDATE_ON_DUPLICATE=True`
+    或 `POSTGRES_ON_CONFLICT="update"` 走 upsert，而不是指望 `UpdateItem`。
+
+
 ```python
 class PriceItem(mw.UpdateItem):
     __table_name__ = "price"
