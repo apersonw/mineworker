@@ -113,21 +113,22 @@ class AsyncHttpxDownloader(Downloader):
     async def _client_for_proxy(self, proxy: str, verify: Any) -> httpx.AsyncClient:
         """这个代理对应的连接池。换出的要 `await aclose()` —— 异步 client 的关法
         和同步不一样，在同步上下文里调 close() 会留下没关的连接。"""
-        client = self._proxied.get(proxy)
-        if client is not None:
-            return client  # type: ignore[no-any-return]
+
         # 主 client 早就配了 limits，这条「每代理」的路径却没有 —— 同一个文件里
         # 两条构造路径不一致，而开代理池时走的恰恰是没配的那条
-        client = httpx.AsyncClient(
-            follow_redirects=True,
-            verify=ssl_context_for(verify),
-            proxy=proxy,
-            limits=pool_limits(self._concurrency),
-        )
-        for evicted in self._proxied.put(proxy, client):
+        def _build() -> httpx.AsyncClient:
+            return httpx.AsyncClient(
+                follow_redirects=True,
+                verify=ssl_context_for(verify),
+                proxy=proxy,
+                limits=pool_limits(self._concurrency),
+            )
+
+        client, evicted_list = self._proxied.get_or_create(proxy, _build)
+        for evicted in evicted_list:
             with contextlib.suppress(Exception):
                 await evicted.aclose()
-        return client
+        return client  # type: ignore[no-any-return]
 
     async def _download(self, request: Request) -> Response:
         assert self._client is not None and self._sem is not None

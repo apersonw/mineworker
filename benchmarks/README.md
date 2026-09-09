@@ -142,7 +142,8 @@ brew install tinyproxy
 
 ```python
 from proxylab import proxy
-with proxy() as url:          # http://127.0.0.1:<随机端口>
+
+with proxy() as url:  # http://127.0.0.1:<随机端口>
     ...
 ```
 

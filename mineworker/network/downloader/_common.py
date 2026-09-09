@@ -7,7 +7,7 @@ import ssl
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -86,28 +86,42 @@ class ProxyClientCache:
     缓存自己去关就没法同时服务两种。
     """
 
-    __slots__ = ("_items",)
+    __slots__ = ("_items", "_lock")
 
     def __init__(self) -> None:
         self._items: OrderedDict[str | None, Any] = OrderedDict()
+        self._lock = threading.Lock()
 
     def __len__(self) -> int:
         return len(self._items)
 
-    def get(self, proxy: str | None) -> Any:
-        client = self._items.get(proxy)
-        if client is not None:
-            self._items.move_to_end(proxy)
-        return client
+    def get_or_create(self, proxy: str | None, factory: Callable[[], Any]) -> tuple[Any, list[Any]]:
+        """原子的「取或建」。返回 (要用的对象, **调用方需要关掉**的对象列表)。
 
-    def put(self, proxy: str | None, client: Any) -> list[Any]:
-        """存入并返回**被换出、需要关闭**的对象。"""
-        self._items[proxy] = client
-        evicted = []
-        while len(self._items) > max(setting.SESSION_CACHE_SIZE, 1):
-            _, old = self._items.popitem(last=False)
-            evicted.append(old)
-        return evicted
+        原来这里是分开的 `get()` / `put()`，调用方写成无锁的「查 → 建 → 存」：
+        N 个线程首次碰到同一个代理会各建一个 client（实测 32 线程建了 32 个），
+        而 `put()` 同 key 覆盖时把被顶掉的那个**既不返回也不关闭** ——
+        它的文档恰恰承诺「返回被换出、需要关闭的对象」。
+
+        ⚠️ **不能只让 put 返回被顶掉的那个**：抢输的线程正拿着它发请求，
+        关掉就是 use-after-close。所以查和建必须在同一把锁里 ——
+        抢输者拿到的是赢家的 client，要关的是**自己**刚建的那个。
+
+        `factory()` 在锁内调用，构造被串行化。实测构造一个带代理的 client 约
+        0.1ms，比让 N 个线程各建一个便宜得多。
+        """
+        with self._lock:
+            client = self._items.get(proxy)
+            if client is not None:
+                self._items.move_to_end(proxy)
+                return client, []
+            client = factory()
+            self._items[proxy] = client
+            evicted = []
+            while len(self._items) > max(setting.SESSION_CACHE_SIZE, 1):
+                _, old = self._items.popitem(last=False)
+                evicted.append(old)
+            return client, evicted
 
     def drain(self) -> list[Any]:
         """取出全部并清空 —— 关闭下载器时用。"""

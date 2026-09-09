@@ -82,15 +82,14 @@ class HttpxDownloader(Downloader):
 
     def _session_client(self, proxy: str | None) -> httpx.Client:
         """取这个代理对应的连接池，没有就建一个。超出上限时关掉最久没用的。"""
-        client = self._clients.get(proxy)
-        if client is not None:
-            return client  # type: ignore[no-any-return]
-        client = self._make_client(proxy, self._verify)
-        for evicted in self._clients.put(proxy, client):
+        client, evicted_list = self._clients.get_or_create(
+            proxy, lambda: self._make_client(proxy, self._verify)
+        )
+        for evicted in evicted_list:
             # 换出时必须关掉，否则连接和 fd 就泄漏了
             with contextlib.suppress(Exception):
                 evicted.close()
-        return client
+        return client  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def download(self, request: Request) -> Response:
