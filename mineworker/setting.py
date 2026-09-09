@@ -105,6 +105,19 @@ USE_SESSION: bool = False
 # 开 USE_SESSION 且用代理池时，最多同时缓存多少个「每代理一个」的连接池。
 # 代理池可能有上千个代理，无上限缓存会把连接和文件描述符耗光
 SESSION_CACHE_SIZE: int = 16
+# 每个「代理连接池」最多服务多少个线程，超出就再开一片。
+#
+# 一个 httpx.Client 被太多线程共用时，连接池本身成为争用点：实测（https、单代理、
+# 每格多轮，靶子天花板已用裸 asyncio 确认远高于被测）共用一个 client 的吞吐
+# 到 ~32 线程见顶后**掉头向下** —— 48 线程 248 QPS、64 线程 172、96 线程 105，
+# 比「每请求新建一个 client」还慢。分片后：48 线程 563、64 线程 492、96 线程 434。
+#
+# 32 是实测的拐点。线程数不超过它时 K=1，与不分片完全一致。
+# 设成 0 关闭分片（回到「每代理一个 client」）。
+#
+# **分片不改变 cookie 语义**：同一个代理的所有分片共用一个 CookieJar
+# （httpx 收到裸 CookieJar 时按引用使用，且 CookieJar 自带锁）。
+SESSION_SHARD_THREADS: int = 32
 
 # ---- per-domain 限速（按域名分账）----
 CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不限
