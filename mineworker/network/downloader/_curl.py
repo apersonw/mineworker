@@ -94,14 +94,13 @@ class CurlDownloader(Downloader):
         return self._make_session(proxy, verify, cookies), True, proxy
 
     def _session_for_proxy(self, proxy: str | None) -> CurlSession:
-        session = self._sessions.get(proxy)
-        if session is not None:
-            return session  # type: ignore[no-any-return]
-        session = self._make_session(proxy, self._verify)
-        for evicted in self._sessions.put(proxy, session):
+        session, evicted_list = self._sessions.get_or_create(
+            proxy, lambda: self._make_session(proxy, self._verify)
+        )
+        for evicted in evicted_list:
             with contextlib.suppress(Exception):
                 evicted.close()
-        return session
+        return session  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     def download(self, request: Request) -> Response:

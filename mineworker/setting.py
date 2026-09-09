@@ -177,6 +177,15 @@ PROXY_MAX_USE_TIMES: int = 100  # 单个代理最多用多少次后轮换
 PROXY_MIN_INTERVAL: float = 1.0  # 两次抓取代理列表的最小间隔（秒）
 # 池空时最多等多久（秒）—— 供应商短暂断供期间不至于把任务耗完重试次数丢掉
 PROXY_WAIT_TIMEOUT: float = 30.0
+# 代理失败后的冷却时间（秒）—— **不是永久拉黑**。
+# 原来一次 `report_bad` 就把代理永久加进黑名单，而拉列表时又拒绝放回黑名单里的，
+# 于是单代理池被一次瞬时错误打空后**再也起不来**：配合 PROXY_ALLOW_DIRECT=False，
+# 后面每个请求都先等满 PROXY_WAIT_TIMEOUT 再失败。不是崩溃，是静默降级。
+# 而瞬时错误是常态 —— 实测健康的本地 tinyproxy 在 960 个请求里也重置了 3 条连接。
+# 连续失败按 2 倍退避（60 → 120 → 240…），封顶 PROXY_BAN_MAX_SECONDS；
+# 距上次失败超过封顶值即视为已恢复，退避重新从头算。
+PROXY_BAN_SECONDS: float = 60.0
+PROXY_BAN_MAX_SECONDS: float = 900.0  # 退避上限；PROXY_BAN_SECONDS=0 则回到「永久拉黑」
 # 等不到代理时是否允许直连。默认 False：静默直连会把源 IP 暴露给目标站，
 # 而那正是开代理池要避免的。设成 True 就是明确接受「有代理就用、没有就直连」
 PROXY_ALLOW_DIRECT: bool = False

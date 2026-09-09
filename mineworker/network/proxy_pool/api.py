@@ -3,6 +3,11 @@
 ``PROXY_EXTRACT_API`` 返回的内容可以是每行一个代理，或一个 JSON 字符串数组。
 拿到后轮流使用；某代理被 ``report_bad`` 或用满 ``PROXY_MAX_USE_TIMES`` 次后丢弃，
 池空时（且距上次拉取超过 ``PROXY_MIN_INTERVAL``）重新拉取。
+
+``report_bad`` 让代理**冷却**而不是永久出局：原来它只进不出，一次瞬时错误就把代理
+永久拉黑，拉列表时又拒绝放回黑名单里的 —— 单代理池被打空后再也起不来，
+配合 ``PROXY_ALLOW_DIRECT=False`` 就是每请求空等 ``PROXY_WAIT_TIMEOUT`` 再失败。
+现在连续失败按 2 倍退避（见 ``PROXY_BAN_SECONDS``），冷却期一过自动重新可用。
 """
 
 from __future__ import annotations
@@ -28,7 +33,12 @@ class ApiProxyPool(ProxyPool):
         self._lock = threading.Lock()
         self._pool: deque[str] = deque()
         self._use_count: dict[str, int] = {}
-        self._bad: set[str] = set()
+        # 代理 -> 解禁时刻（monotonic）。原来这里是个只进不出的 set，
+        # 一次瞬时错误就把代理永久踢出，池被啃空后整个爬虫静默降级到
+        # 「每请求空等 PROXY_WAIT_TIMEOUT 再失败」
+        self._banned: dict[str, float] = {}
+        # 代理 -> (连续失败次数, 上次失败时刻)，用来做指数退避
+        self._fails: dict[str, tuple[int, float]] = {}
         # None = 从没抓过。不能用 0.0 当哨兵：monotonic 的原点是开机，刚启动的容器上
         # monotonic() - 0.0 < PROXY_MIN_INTERVAL 会把第一次抓取跳过，代理池起不来。
         self._last_fetch: float | None = None
@@ -48,7 +58,7 @@ class ApiProxyPool(ProxyPool):
             return
         proxies = self._parse(body)
         for proxy in proxies:
-            if proxy not in self._bad and proxy not in self._pool:
+            if not self._is_banned(proxy, now) and proxy not in self._pool:
                 self._pool.append(proxy)
         log.debug("代理池补充 {} 个，当前 {}", len(proxies), len(self._pool))
 
@@ -72,7 +82,7 @@ class ApiProxyPool(ProxyPool):
             for _ in range(len(self._pool)):
                 proxy = self._pool[0]
                 self._pool.rotate(-1)  # 轮转到队尾
-                if proxy in self._bad:
+                if self._is_banned(proxy, time.monotonic()):
                     self._drop(proxy)
                     continue
                 self._use_count[proxy] = self._use_count.get(proxy, 0) + 1
@@ -85,12 +95,46 @@ class ApiProxyPool(ProxyPool):
         with contextlib.suppress(ValueError):
             self._pool.remove(proxy)
 
+    def _ban_seconds(self, fails: int) -> float:
+        """第 N 次连续失败要冷却多久。``PROXY_BAN_SECONDS=0`` 时回到旧的「永久拉黑」。"""
+        base = setting.PROXY_BAN_SECONDS
+        if base <= 0:
+            return float("inf")
+        return float(min(base * (2 ** (fails - 1)), setting.PROXY_BAN_MAX_SECONDS))
+
+    def _is_banned(self, proxy: str, now: float) -> bool:
+        """冷却是否还没结束。**过期的顺手清掉** —— 这就是代理重新可用的路径。"""
+        until = self._banned.get(proxy)
+        if until is None:
+            return False
+        if until > now:
+            return True
+        del self._banned[proxy]
+        log.debug("代理 {} 冷却结束，重新可用", proxy)
+        return False
+
     def report_bad(self, proxy: str) -> None:
         with self._lock:
+            now = time.monotonic()
             raw = proxy.split("://", 1)[-1]
-            self._bad.add(raw)
-            self._bad.add(proxy)
+            fails, last = self._fails.get(raw, (0, 0.0))
+            # 距上次失败已经超过最长冷却 —— 中间一直好好的，退避重新从头算，
+            # 否则一个跑了几天的进程会把偶发失败累积成永久放逐
+            if last and now - last > setting.PROXY_BAN_MAX_SECONDS:
+                fails = 0
+            fails += 1
+            self._fails[raw] = (fails, now)
+            seconds = self._ban_seconds(fails)
+            # 两种写法都记：拉列表拿到的是裸 host:port，调用方报上来的带 scheme
+            for key in (raw, proxy):
+                self._banned[key] = now + seconds
             self._drop(raw)
+            log.warning(
+                "代理 {} 第 {} 次连续失败，冷却 {}",
+                proxy,
+                fails,
+                "永久（PROXY_BAN_SECONDS=0）" if seconds == float("inf") else f"{seconds:.0f}s",
+            )
 
     def close(self) -> None:
         with self._lock:
