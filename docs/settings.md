@@ -20,6 +20,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `SPIDER_MAX_RETRY_TIMES` | `3` | 单请求最大重试次数 |
 | `SESSION_CACHE_SIZE` | `16` | 开 `USE_SESSION` 且用代理池时，最多缓存多少个代理的连接池（分片后上限按片数自动放大） |
 | `SESSION_SHARD_THREADS` | `32` | 每个代理连接池最多服务多少线程，超出再开一片；`0` = 不分片。见下方说明 |
+| `CURL_SESSION_SHARD_THREADS` | `16` | 同上，但用于 curl 下载器 —— **拐点是分别量出来的，不是同一个数** |
 | `SPIDER_RETRY_INTERVAL` | `0.0` | 重试前等待秒数 |
 | `COLLECTOR_TASK_COUNT` | `100` | collector 单次从队列取多少任务 |
 | `DONE_CHECK_TIMES` / `DONE_CHECK_INTERVAL` | `3` / `0.5` | 结束检测的复查次数与间隔 |
@@ -177,3 +178,33 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 
 即便分片之后，`DOWNLOADER_ASYNC` 相对同步下载器的优势也只在**中等线程数**（≤32）成立；
 48 线程往上两者接近，200 线程时同步略胜。它不是「线程越多越值」的开关。
+
+## curl 下载器：`use_session` 不带来连接复用
+
+框架的 curl 下载器**永远**用 `stream=True`（为了 `MAX_RESPONSE_SIZE` 边读边判），
+而 curl_cffi 的 `Response._finalize_stream()` 收尾时执行 `self.curl.close()` ——
+关掉的是**整个 Curl 句柄**，句柄的连接缓存随之消失，不是把连接归还池子。
+实测（同线程 5 次串行、数保活 socket）：
+
+| | stream=False | stream=True |
+|---|---:|---:|
+| `impersonate` 关 | 2 条 | **0 条** |
+| `impersonate=chrome` | 2 条 | **0 条** |
+| 对照 `httpx.Client` | 2 条 | — |
+
+所以在 curl 这条路径上，**`use_session=True` 只带来 cookie 持久化，不带来连接复用**。
+（早先的文档说「三个下载器都复用连接」，那句话对 curl 是错的。）
+要拿回复用就得放弃边读边判的响应体上限，那是安全边界，不做这个交换。
+
+**但共用一个 `Session` 仍然要付代价**，且拐点比 httpx 更低 —— curl 从 16 线程起
+就不再增长，所以有独立的 `CURL_SESSION_SHARD_THREADS`（默认 16）：
+
+| 线程 | 8 | 16 | 32 | 48 | 64 |
+|---|---:|---:|---:|---:|---:|
+| 分片前 | 131 | 233 | **235** | **234** | **233** |
+| 分片后 | 133 | 233 | **371** | **466** | **525** |
+| 不开 session（对照） | 127 | 214 | 338 | 405 | 459 |
+
+分片前，32 线程往上开 `use_session` 比不开还慢；分片后全线反超。
+线程数 ≤ `CURL_SESSION_SHARD_THREADS` 时只有一个 session，与分片前完全一致。
+分片同样**不改变 cookie 语义**：同一代理的所有分片共用一个 `CookieJar`。

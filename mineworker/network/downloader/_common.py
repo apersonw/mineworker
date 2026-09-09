@@ -81,14 +81,19 @@ _shard_ids = threading.local()
 _shard_counter = itertools.count()
 
 
-def shard_count(concurrency: int | None = None) -> int:
+def shard_count(concurrency: int | None = None, per_shard: int | None = None) -> int:
     """一个代理要开几片连接池。
+
+    ``per_shard`` 让调用方带自己的拐点：httpx 与 curl 的拐点是**分别量出来的**，
+    httpx 在 32、curl 在 16。共用一个数字就会有一边不对 ——
+    curl 用 32 时，32 线程那格 `ceil(32/32)=1`，等于没分片（实测 230 QPS，
+    而分片后是 391）。
 
     一个 `httpx.Client` 被太多线程共用时，连接池自己成为争用点 —— 吞吐到
     ~32 线程见顶后**掉头向下**（实测 48/64/96 线程：248 / 172 / 105 QPS，
     比每请求新建还慢）。按 `SESSION_SHARD_THREADS` 分片后：563 / 492 / 434。
     """
-    per_shard = setting.SESSION_SHARD_THREADS
+    per_shard = setting.SESSION_SHARD_THREADS if per_shard is None else per_shard
     if per_shard <= 0:
         return 1
     n = max(concurrency if concurrency is not None else setting.SPIDER_THREAD_COUNT, 1)

@@ -10,8 +10,10 @@ libcurl-impersonate，能复刻真实浏览器的握手，从这一层解决问�
 from __future__ import annotations
 
 import contextlib
+from http.cookiejar import CookieJar
 from typing import TYPE_CHECKING, Any, cast
 
+from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
     ProxyClientCache,
@@ -21,6 +23,8 @@ from mineworker.network.downloader._common import (
     report_bad_proxy,
     resolve_impersonate,
     send_kwargs,
+    shard_count,
+    shard_index,
 )
 from mineworker.network.downloader.base import Downloader
 from mineworker.network.response import Response
@@ -68,18 +72,22 @@ class CurlDownloader(Downloader):
         # 按实际使用的代理缓存，而不是拿下载器的固定代理去比 ——
         # 后者在开代理池时永远不相等，于是每个请求都新建一个 session
         self._sessions = ProxyClientCache()
+        # 每个代理一个 cookie jar，被该代理的所有分片共用 —— 见 `_jar_for`
+        self._jars = ProxyClientCache()
 
     # ------------------------------------------------------------------
     def _make_session(
         self,
         proxy: str | None,
         verify: bool,
-        cookies: dict[str, str] | None = None,
+        cookies: dict[str, str] | CookieJar | None = None,
     ) -> CurlSession:
         kwargs: dict[str, Any] = {"verify": verify}
         if proxy:
             kwargs["proxy"] = proxy
-        if cookies:
+        # `is not None` 而不是真值判断：空的 CookieJar 是假值，但必须传进去，
+        # 否则 curl_cffi 会自己另建一个，分片之间就不共享了
+        if cookies is not None:
             kwargs["cookies"] = cookies
         session: CurlSession = _requests().Session(**kwargs)
         return session
@@ -93,9 +101,33 @@ class CurlDownloader(Downloader):
             return self._session_for_proxy(proxy), False, proxy
         return self._make_session(proxy, verify, cookies), True, proxy
 
+    def _jar_for(self, proxy: str | None) -> CookieJar:
+        """这个代理的 cookie jar —— **所有分片共用同一个**。
+
+        curl_cffi 和 httpx 一样，收到裸 `CookieJar` 时按引用使用
+        （`Cookies.__init__` 的 else 分支），而 `CookieJar` 自带 `_cookies_lock`。
+        所以分片不改变 cookie 语义。
+        """
+        jar, _ = self._jars.get_or_create(proxy, CookieJar)
+        return jar  # type: ignore[no-any-return]
+
     def _session_for_proxy(self, proxy: str | None) -> CurlSession:
+        """取这个代理对应的 session。**一个代理可能有多片。**
+
+        ⚠️ 分片在这里买到的**不是连接复用** —— curl 这条路径压根没有连接复用
+        （见 `download` 里的说明）。买到的是「别让一个 Session 被太多线程共用」：
+        实测 64 线程共用一个 242 QPS，按 16 线程分片后 589 QPS（2.4×），
+        而每线程一个是 596 —— 分片已经追平，不必一线程一个。
+        **拐点是 16 不是 32**（httpx 那边是 32）：curl 共用一个 Session 从 16 线程
+        起就不再增长，所以有独立的 `CURL_SESSION_SHARD_THREADS`。
+        curl_cffi 自己的 Session 文档也写着「建议每个线程一个 session」。
+        """
+        shards = shard_count(per_shard=setting.CURL_SESSION_SHARD_THREADS)
+        key = proxy if shards <= 1 else f"{proxy}#{shard_index(shards)}"
         session, evicted_list = self._sessions.get_or_create(
-            proxy, lambda: self._make_session(proxy, self._verify)
+            key,
+            lambda: self._make_session(proxy, self._verify, cookies=self._jar_for(proxy)),
+            capacity=max(setting.SESSION_CACHE_SIZE, 1) * shards,
         )
         for evicted in evicted_list:
             with contextlib.suppress(Exception):
@@ -113,7 +145,17 @@ class CurlDownloader(Downloader):
             kwargs["impersonate"] = impersonate
         try:
             # method 在 Request.__init__ 里已 upper()，curl_cffi 的签名要 Literal
-            # stream=True：先拿响应头再决定读不读 body，和 httpx 那边同一个道理
+            # stream=True：先拿响应头再决定读不读 body，和 httpx 那边同一个道理。
+            #
+            # ⚠️ **代价是这条路径没有连接复用**：curl_cffi 的
+            # `Response._finalize_stream()` 收尾时执行 `self.curl.close()` ——
+            # 关掉的是整个 Curl 句柄，句柄的连接缓存随之消失，不是把连接归还。
+            # 实测（同线程 5 次串行、数保活 socket）：
+            #     stream=False → 2 条保活    stream=True → 0 条
+            # impersonate 开不开都一样，httpx 对照组是 2 条。
+            # 所以 `use_session=True` 在 curl 这边**只带来 cookie 持久化**，
+            # 不带来连接复用 —— 这一点先前的注释和文档都写反了。
+            # 想拿回复用就得放弃 MAX_RESPONSE_SIZE 的边读边判，那是安全边界，不换。
             # 标成 Any：curl_cffi 的 iter_content / close 没有类型标注，
             # 在 strict 下会报 no-untyped-call。这里比逐行 type: ignore 干净
             resp: Any = session.request(
