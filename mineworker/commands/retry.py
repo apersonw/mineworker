@@ -70,9 +70,7 @@ def retry_items(path: str | None = None) -> tuple[int, int]:
             datas = [r["data"] for r in rows]
             try:
                 if keys:
-                    done = all(
-                        p.update_items(table, datas, list(keys)) for p in _pipelines(paths)
-                    )
+                    done = all(p.update_items(table, datas, list(keys)) for p in _pipelines(paths))
                 else:
                     done = all(p.save_items(table, datas) for p in _pipelines(paths))
             except Exception:

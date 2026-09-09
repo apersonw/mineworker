@@ -83,6 +83,7 @@ def test_explicit_proxy_wins_without_waiting() -> None:
 
 def test_waits_for_stock_instead_of_failing_immediately() -> None:
     """供应商短暂断供不该把任务的重试次数耗光 —— 先等一会儿再重取。"""
+
     def restock() -> None:
         time.sleep(0.1)
         _Pool.script.append("http://restocked:8080")

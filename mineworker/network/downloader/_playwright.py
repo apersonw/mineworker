@@ -43,7 +43,6 @@ _WAIT_MARGIN = 30.0
 class _Job:
     __slots__ = ("error", "event", "request", "response")
 
-
     def __init__(self, request: Request) -> None:
         self.request = request
         self.event = threading.Event()
