@@ -183,10 +183,20 @@ class ItemBuffer(threading.Thread):
         dedup = self._get_dedup()
         seen: set[str] = set()
         groups: dict[tuple[str, bool, tuple[str, ...] | None], list[_Norm]] = defaultdict(list)
+        degraded = False
         for obj in batch:
             norm = _normalize(obj)
             if norm.fingerprint is not None and dedup is not None:
-                if norm.fingerprint in seen or dedup.get(norm.fingerprint):
+                try:
+                    duplicate = norm.fingerprint in seen or dedup.get(norm.fingerprint)
+                except Exception:
+                    # 查重也是一次 Redis 调用。抛出去的话异常会穿出这个循环，
+                    # 后面的数据既不写库、也不 dump ——
+                    # 实测 9 条数据在第 3 条上抖一次：整批 9 条全丢。
+                    # 去重是优化，丢数据不是可选项：按「没见过」放行
+                    degraded = True
+                    duplicate = False
+                if duplicate:
                     self._stats.incr(sk.ITEM_DEDUP_DROPPED)
                     continue
                 seen.add(norm.fingerprint)
@@ -203,9 +213,15 @@ class ItemBuffer(threading.Thread):
             if ok:
                 self._stats.incr(sk.ITEM, len(datas))
                 if dedup is not None:
-                    for row in rows:
-                        if row.fingerprint is not None:
-                            dedup.add(row.fingerprint)
+                    try:
+                        for row in rows:
+                            if row.fingerprint is not None:
+                                dedup.add(row.fingerprint)
+                    except Exception:
+                        # 数据已经写进去了，指纹没记上 —— 重抓时会重复入库。
+                        # 但让异常穿出去更糟：后面的分组会一起丢
+                        # （实测第一组写成功、剩下 6 条凭空消失）
+                        degraded = True
             else:
                 self._dump_failed(
                     table,
@@ -213,6 +229,11 @@ class ItemBuffer(threading.Thread):
                     update_keys=update_keys if is_update else None,
                     pipelines=pipe_paths,
                 )
+
+        if degraded:
+            # 按批记一次，别每条都刷屏；但必须记 —— 静默降级就是把一种无声换成另一种
+            self._stats.incr(sk.DEDUP_DEGRADED)
+            log.warning("Item 去重不可用，本批按「没见过」放行 —— 可能重复入库")
 
     # ------------------------------------------------------------------
     def _get_dedup(self) -> Dedup | None:

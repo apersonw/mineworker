@@ -141,6 +141,16 @@ ITEM_PIPELINES = ["mineworker.pipelines.kafka.KafkaPipeline"]
 
 ## 去重
 
+!!! note "去重服务不可用时会降级，而不是丢数据"
+    Item 去重要查 Redis。查不通时框架按「没见过」放行并继续写库 ——
+    **去重是优化，丢数据不是可选项**。这一批会记一条 warning，
+    运行结束的汇总里也会带上「⚠️ 去重降级 N 批（可能重复入库）」。
+
+    早先的版本让异常从落库循环里穿出去：后面的分组既没写库、也没 dump。
+    实测 9 条数据分 3 组，查重抖一下 **整批 9 条全丢**，
+    记指纹抖一下 **第一组写成功、剩下 6 条凭空消失**。
+
+
 - **请求级**：`Request.filter_repeat=True` 时按 `fingerprint`（method + 规范化 URL + body）去重
 - **Item 级**：`ITEM_FILTER_ENABLE=True` 时按 `Item.fingerprint` 去重，**写库成功后**才记指纹
 

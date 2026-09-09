@@ -17,6 +17,7 @@ CONTENT_TYPE_DROPPED = "content_type_dropped"
 ITEM = "item"
 ITEM_DEDUP_DROPPED = "item_dedup_dropped"
 ITEM_FAILED = "item_failed"
+DEDUP_DEGRADED = "dedup_degraded"  # 去重不可用、按「没见过」放行的批次数
 
 
 class Stats:
@@ -56,4 +57,8 @@ class Stats:
         blocked = d.get(ROBOTS_DROPPED, 0)
         if blocked:
             line += f" | robots 拦截 {blocked}"
+        # 去重降级过就必须说 —— 那意味着这段时间的数据可能重复入库
+        degraded = d.get(DEDUP_DEGRADED, 0)
+        if degraded:
+            line += f" | ⚠️ 去重降级 {degraded} 批（可能重复入库）"
         return line
