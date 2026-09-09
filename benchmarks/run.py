@@ -92,9 +92,23 @@ def _make_spider(url: str, n: int, parse_mode: str, session: bool) -> type[mw.Ai
 
 
 def _run_once(
-    threads: int, downloader: str, session: bool, latency: float, parse: str, n: int
+    threads: int,
+    downloader: str,
+    session: bool,
+    latency: float,
+    parse: str,
+    n: int,
+    domain_cap: int = 0,
 ) -> Result:
     setting.reload()
+    # **必须显式设**：压测所有请求都打同一个域，而 CONCURRENT_REQUESTS_PER_DOMAIN
+    # 默认是 8 —— 不控制它的话，量到的是这个上限而不是框架的天花板。
+    # 实测差别（50ms、sync、开 session）：
+    #   上限 8   4→128 线程 QPS：75 → 146 → 146 → 146（在途卡死在 7.4）
+    #   上限关   4→128 线程 QPS：74 → 240 → 542 → 608
+    # 结论完全相反，而这个变量以前没人管。默认关掉 = 测框架自身；
+    # 想看真实部署的样子就把它设回 8。
+    setting.CONCURRENT_REQUESTS_PER_DOMAIN = domain_cap
     setting.SPIDER_THREAD_COUNT = threads
     setting.DOWNLOADER_ASYNC = downloader == "async"
     setting.DOWNLOADER_ASYNC_CONCURRENCY = max(threads * 2, 200)
@@ -161,8 +175,14 @@ def _median_of(rounds: int, **kw: object) -> Result:
     return best
 
 
-def _table(results: list[Result]) -> str:
+def _table(results: list[Result], domain_cap: int = 0) -> str:
+    cap_note = (
+        "**单域并发上限已关**（测框架自身的天花板；真实部署默认是 8，届时会先撞上它）"
+        if domain_cap <= 0
+        else f"**单域并发上限 = {domain_cap}**（真实部署的样子）"
+    )
     head = (
+        f"{cap_note}\n\n"
         "| 线程数 | 下载器 | session | 延迟 | parse | QPS | 理论 QPS | 效率 | "
         "平均在途 | 峰值 | 在途/线程 | RSS(MB) |\n"
         "|---:|---|:-:|---:|---|---:|---:|---:|---:|---:|---:|---:|\n"
@@ -182,6 +202,12 @@ def main() -> None:
     ap.add_argument("--quick", action="store_true", help="小矩阵，用于冒烟")
     ap.add_argument("--rounds", type=int, default=3, help="每格跑几轮取中位数")
     ap.add_argument("--requests", type=int, default=600, help="每格发多少请求")
+    ap.add_argument(
+        "--domain-cap",
+        type=int,
+        default=0,
+        help="单域并发上限（0=关，测框架天花板；8=框架默认，测真实部署的样子）",
+    )
     args = ap.parse_args()
 
     if args.quick:
@@ -217,10 +243,17 @@ def main() -> None:
         )
         results.append(
             _median_of(
-                rounds, threads=th, downloader=dl, session=sess, latency=lat, parse=parse, n=n
+                rounds,
+                threads=th,
+                downloader=dl,
+                session=sess,
+                latency=lat,
+                parse=parse,
+                n=n,
+                domain_cap=args.domain_cap,
             )
         )
-    print(_table(results))
+    print(_table(results, args.domain_cap))
 
     # 触顶点：QPS 不再随线程数上涨的地方
     print("\n## 读法\n")
