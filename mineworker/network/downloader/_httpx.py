@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -12,6 +11,7 @@ from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
     CLIENT_ONLY_KEYS,
+    ProxyClientCache,
     check_content_type,
     pick_proxy,
     read_capped,
@@ -47,7 +47,7 @@ class HttpxDownloader(Downloader):
         # 去比**状态**（这次实际用的代理），开代理池时两者永远不等，
         # 于是每个请求都新建一次 client。实测 5 个请求建了 5 个。
         # 有界 LRU：代理池可能有上千个代理，不设上限就是把性能问题换成资源泄漏
-        self._clients: OrderedDict[str | None, httpx.Client] = OrderedDict()
+        self._clients = ProxyClientCache()
 
     # ------------------------------------------------------------------
     def _make_client(
@@ -79,13 +79,10 @@ class HttpxDownloader(Downloader):
         """取这个代理对应的连接池，没有就建一个。超出上限时关掉最久没用的。"""
         client = self._clients.get(proxy)
         if client is not None:
-            self._clients.move_to_end(proxy)
-            return client
+            return client  # type: ignore[no-any-return]
         client = self._make_client(proxy, self._verify)
-        self._clients[proxy] = client
-        while len(self._clients) > max(setting.SESSION_CACHE_SIZE, 1):
+        for evicted in self._clients.put(proxy, client):
             # 换出时必须关掉，否则连接和 fd 就泄漏了
-            _, evicted = self._clients.popitem(last=False)
             with contextlib.suppress(Exception):
                 evicted.close()
         return client
@@ -114,7 +111,6 @@ class HttpxDownloader(Downloader):
         return Response.from_httpx(resp, request, content=content)
 
     def close(self) -> None:
-        for client in self._clients.values():
+        for client in self._clients.drain():
             with contextlib.suppress(Exception):
                 client.close()
-        self._clients.clear()

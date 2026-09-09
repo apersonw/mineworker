@@ -6,6 +6,7 @@ import asyncio
 import ssl
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -54,6 +55,46 @@ def ssl_context_for(verify: Any) -> Any:
             cached = httpx.create_ssl_context(verify=verify)
             _ssl_cache[key] = cached
     return cached
+
+
+class ProxyClientCache:
+    """按「实际使用的代理」缓存连接池，有界 LRU。
+
+    三个下载器（httpx / curl / async）都要这套逻辑。抽到一处是因为上一程
+    只修了其中一个 —— 同一条逻辑散成三份，下次改还是只会改到一个。
+
+    **换出的对象交回调用方关闭**：同步的是 `close()`、异步的是 `await aclose()`，
+    缓存自己去关就没法同时服务两种。
+    """
+
+    __slots__ = ("_items",)
+
+    def __init__(self) -> None:
+        self._items: OrderedDict[str | None, Any] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def get(self, proxy: str | None) -> Any:
+        client = self._items.get(proxy)
+        if client is not None:
+            self._items.move_to_end(proxy)
+        return client
+
+    def put(self, proxy: str | None, client: Any) -> list[Any]:
+        """存入并返回**被换出、需要关闭**的对象。"""
+        self._items[proxy] = client
+        evicted = []
+        while len(self._items) > max(setting.SESSION_CACHE_SIZE, 1):
+            _, old = self._items.popitem(last=False)
+            evicted.append(old)
+        return evicted
+
+    def drain(self) -> list[Any]:
+        """取出全部并清空 —— 关闭下载器时用。"""
+        items = list(self._items.values())
+        self._items.clear()
+        return items
 
 
 def _attempt_proxy(request: Request, fallback: str | None) -> tuple[str | None, bool]:

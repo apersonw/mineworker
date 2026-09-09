@@ -1,4 +1,4 @@
-"""`USE_SESSION` 在开代理池时也要生效。
+"""三个下载器在开代理池时都要复用连接。
 
 `_client_for()` 原来的复用条件是 `proxy == self._proxy` —— 拿**配置**
 （下载器的固定代理，通常是 None）去比**状态**（这次实际用的代理）。
@@ -10,6 +10,11 @@
 
 而压测结论正是「瓶颈是每请求建连，不是线程模型」，
 所以这个开关在开代理池的部署里等于没有。
+
+框架有三个下载器，三个都有这个问题（curl 是一模一样的判据，
+async 写法不同但后果相同：有代理就每请求建一个一次性 client）。
+按代理缓存的逻辑抽到了 `ProxyClientCache`，三者共用 ——
+散成三份的话，下次改还是只会改到一个。
 """
 
 from __future__ import annotations
@@ -94,7 +99,7 @@ def test_close_closes_every_client(downloader: Any) -> None:
         downloader._client_for(_req(proxy=f"http://p{i}:8080"))
     downloader.close()
     assert all(c.closed for c in downloader.made), "close() 漏掉了缓存里的连接池"
-    assert downloader._clients == {}
+    assert len(downloader._clients) == 0
 
 
 def test_request_with_cookies_gets_a_throwaway_client(downloader: Any) -> None:
@@ -103,4 +108,75 @@ def test_request_with_cookies_gets_a_throwaway_client(downloader: Any) -> None:
     request.requests_kwargs["cookies"] = {"sid": "x"}
     _client, should_close, _proxy = downloader._client_for(request)
     assert should_close is True
-    assert downloader._clients == {}
+    assert len(downloader._clients) == 0
+
+
+# ---- 另外两个下载器 ---------------------------------------------------
+def test_curl_downloader_reuses_per_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """curl 下载器原来用的是和 httpx 一模一样的错判据。"""
+    from mineworker.network.downloader._curl import CurlDownloader
+
+    dl = CurlDownloader(use_session=True)
+    made: list[_FakeClient] = []
+    monkeypatch.setattr(
+        dl, "_make_session", lambda *a, **k: (made.append(_FakeClient()), made[-1])[1]
+    )
+    for _ in range(5):
+        dl._session_for(_req(proxy="http://p1:8080"))
+    assert len(made) == 1, f"5 个请求建了 {len(made)} 个 session"
+
+    dl._session_for(_req(proxy="http://p2:8080"))
+    assert len(made) == 2, "不同代理必须各自独立"
+
+    dl.close()
+    assert all(c.closed for c in made), "close() 漏掉了缓存里的 session"
+
+
+def test_curl_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mineworker.network.downloader._curl import CurlDownloader
+
+    monkeypatch.setattr(setting, "SESSION_CACHE_SIZE", 2)
+    dl = CurlDownloader(use_session=True)
+    made: list[_FakeClient] = []
+    monkeypatch.setattr(
+        dl, "_make_session", lambda *a, **k: (made.append(_FakeClient()), made[-1])[1]
+    )
+    for i in range(4):
+        dl._session_for(_req(proxy=f"http://p{i}:8080"))
+    assert len([c for c in made if c.closed]) == 2, "换出的 session 没关掉"
+
+
+def test_async_downloader_reuses_per_proxy() -> None:
+    """async 写法不同（有代理就建一次性 client），后果一样。"""
+    import asyncio
+
+    from mineworker.network.downloader import _async_httpx as mod
+
+    dl = mod.AsyncHttpxDownloader()
+
+    async def scenario() -> int:
+        made: list[Any] = []
+
+        class _Fake:
+            def __init__(self, **kw: Any) -> None:
+                made.append(self)
+                self.closed = False
+
+            async def aclose(self) -> None:
+                self.closed = True
+
+        original = mod.httpx.AsyncClient
+        mod.httpx.AsyncClient = _Fake  # type: ignore[misc]
+        try:
+            for _ in range(5):
+                await dl._client_for_proxy("http://p1:8080", True)
+            first = len(made)
+            await dl._client_for_proxy("http://p2:8080", True)
+            second = len(made)
+            await dl._aclose()
+        finally:
+            mod.httpx.AsyncClient = original  # type: ignore[misc]
+        assert all(c.closed for c in made), "close() 漏掉了缓存里的 client"
+        return first * 10 + second
+
+    assert asyncio.run(scenario()) == 12, "同代理没复用，或不同代理共用了"
