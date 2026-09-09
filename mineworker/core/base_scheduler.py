@@ -271,26 +271,55 @@ class BaseScheduler:
             self._stop_event.wait(setting.DONE_CHECK_INTERVAL)
 
     def _teardown(self) -> None:
+        """收尾。**每一步独立兜住** —— 一步失败不能带走后面的。
+
+        原来是一串裸调用，而最关键的两步（把数据落库、把持有的任务推回队列）
+        排在最后面 —— 关机时 Redis 抖一下，第一步 `request_buffer.flush()` 就抛，
+        实测数据没落库、任务也没推回。**最可能抛的那一步，正好排在它们前面。**
+
+        顺序不能动：落库必须在任务推回之前 —— flush 会把已落库的请求从「持有中」
+        摘掉（v4.14 的销账），否则推回时会把它们又推一遍。
+        """
+        steps: list[tuple[str, Any]] = [
+            ("停止工作线程", self._stop_workers),
+            ("停止指标线程", self._stop_metrics),
+            ("停止缓冲线程", self._stop_buffers),
+            ("推送剩余请求", self._request_buffer.flush),
+            ("落库剩余数据", self._item_buffer.flush),
+            ("关闭管道", self._item_buffer.close),
+            ("恢复信号处理", self._restore_signal),
+            ("关闭下载器", close_default_downloaders),
+            ("关闭代理池", close_proxy_pool),
+            ("关闭账号池", self._close_user_pool),
+            ("收尾钩子", self._on_shutdown),
+        ]
+        for name, step in steps:
+            try:
+                step()
+            except Exception:
+                # 「尽力收尾」是对的语义，但不能静默 —— 每一步失败都要留下可查的日志
+                log.exception("收尾步骤「{}」失败，继续执行后面的步骤", name)
+
+    def _stop_workers(self) -> None:
         for worker in self._workers:
             worker.stop()
         for worker in self._workers:
             worker.join(timeout=_JOIN_TIMEOUT)
+
+    def _stop_metrics(self) -> None:
         if self._metrics is not None:
             self._metrics.stop()
             self._metrics.join(timeout=_JOIN_TIMEOUT)
+
+    def _stop_buffers(self) -> None:
         self._request_buffer.stop()
         self._item_buffer.stop()
         self._request_buffer.join(timeout=_JOIN_TIMEOUT)
         self._item_buffer.join(timeout=_JOIN_TIMEOUT)
-        self._request_buffer.flush()
-        self._item_buffer.flush()
-        self._item_buffer.close()
-        self._restore_signal()
-        close_default_downloaders()
-        close_proxy_pool()
+
+    def _close_user_pool(self) -> None:
         if self._user_pool is not None:
             self._user_pool.close()
-        self._on_shutdown()
 
     # ------------------------------------------------------------------
     #: 都要优雅接管。**SIGTERM 尤其重要**：docker stop / K8s 驱逐 / systemctl stop
