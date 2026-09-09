@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,7 @@ import pytest
 from pytest_httpserver import HTTPServer
 from typer.testing import CliRunner
 
+import mineworker as mw
 from mineworker import setting
 from mineworker.commands import create as gen
 from mineworker.commands.cmdline import app
@@ -69,6 +72,61 @@ def test_create_project_scaffold_compiles(tmp_path: Path, monkeypatch: pytest.Mo
     for py in root.rglob("*.py"):
         ast.parse(py.read_text(encoding="utf-8"), str(py))
     assert "MyShopSpider" in (root / "main.py").read_text(encoding="utf-8")
+
+
+def _generate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["create", "-p", "my_shop"]).exit_code == 0
+    return tmp_path / "my_shop"
+
+
+def test_scaffolded_spider_actually_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`ast.parse` 只证明语法合法 —— 模板引用一个不存在的 API 它照样通过。
+
+    实测：把模板里的 `mw.Request` 改成 `mw.RequestXXX`，既有用例仍然 5 passed，
+    而每个新用户生成的项目都跑不起来。脚手架是新用户碰到的第一样东西。
+
+    这里真的把爬虫模块 import 进来并实例化。不真跑抓取 ——
+    那要联网、会让用例变慢变脆，而 import + 实例化已经能抓住 API 改名这类故障。
+    """
+    root = _generate(tmp_path, monkeypatch)
+    monkeypatch.syspath_prepend(str(root))
+    for name in list(sys.modules):
+        if name.startswith("spiders"):
+            del sys.modules[name]
+
+    module = importlib.import_module("spiders.my_shop_spider")
+    spider_cls = module.MyShopSpider
+    spider = spider_cls()  # 实例化也要能过：构造签名变了同样是破坏
+
+    # 必须**迭代** start_requests：模板里的调用写在生成器体内，
+    # 光 import + 实例化执行不到它 —— 第一版守卫就漏在这里，
+    # 把 mw.Request 改成 mw.RequestXXX 之后用例照样绿。
+    # 迭代只构造 Request 对象、不发请求，所以既不联网也不慢。
+    seeds = list(spider.start_requests())
+    assert seeds, "start_requests 一个种子都没产出"
+    assert all(isinstance(r, mw.Request) for r in seeds)
+
+
+def test_scaffolded_settings_all_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """模板里声明的配置项，框架必须都认识。
+
+    实测：往模板加一行框架不存在的配置，既有用例仍然 5 passed ——
+    而那会让每个新项目带着一条永远不生效的配置。
+    只看赋值语句：注释掉的示例是给人看的，不算。
+    """
+    root = _generate(tmp_path, monkeypatch)
+    tree = ast.parse((root / "setting.py").read_text(encoding="utf-8"))
+    declared = [
+        node.targets[0].id
+        for node in tree.body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+    ]
+    assert declared, "模板一项配置都没声明，这个用例什么都没验到"
+    unknown = [name for name in declared if not hasattr(setting, name)]
+    assert not unknown, f"模板声明了框架不认识的配置项：{unknown}"
 
 
 def test_create_project_refuses_nonempty_dir(
