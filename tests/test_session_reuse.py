@@ -168,12 +168,13 @@ def test_async_downloader_reuses_per_proxy() -> None:
         original = mod.httpx.AsyncClient
         mod.httpx.AsyncClient = _Fake  # type: ignore[misc]
         try:
+            shard = dl._shard()
             for _ in range(5):
-                await dl._client_for_proxy("http://p1:8080", True)
+                await dl._client_for_proxy(shard, "http://p1:8080", True)
             first = len(made)
-            await dl._client_for_proxy("http://p2:8080", True)
+            await dl._client_for_proxy(shard, "http://p2:8080", True)
             second = len(made)
-            await dl._aclose()
+            await dl._aclose(shard)
         finally:
             mod.httpx.AsyncClient = original  # type: ignore[misc]
         assert all(c.closed for c in made), "close() 漏掉了缓存里的 client"

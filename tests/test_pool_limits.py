@@ -66,7 +66,8 @@ def test_async_per_proxy_client_gets_limits() -> None:
     """
     downloader = AsyncHttpxDownloader(concurrency=40)
     try:
-        client = downloader._submit(downloader._client_for_proxy("http://127.0.0.1:9", False))
+        shard = downloader._shard()
+        client = shard.submit(downloader._client_for_proxy(shard, "http://127.0.0.1:9", False))
         _, keepalive = _pool_of(client)
         assert keepalive >= 40, f"每代理 client 的 keepalive={keepalive}，没跟上并发 40"
     finally:

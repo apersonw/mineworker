@@ -9,7 +9,7 @@ import respx
 
 from mineworker import Request, RequestError, setting
 from mineworker.network.downloader import close_default_downloaders, get_default_downloader
-from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader
+from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader, loop_count
 from mineworker.network.user_agent import USER_AGENTS
 
 
@@ -77,7 +77,14 @@ def test_network_error_becomes_request_error(downloader: AsyncHttpxDownloader) -
 
 
 @respx.mock
-def test_many_worker_threads_share_one_loop(downloader: AsyncHttpxDownloader) -> None:
+def test_worker_threads_do_not_each_get_a_loop(downloader: AsyncHttpxDownloader) -> None:
+    """12 个 worker 不该开出 12 个事件循环线程。
+
+    v4.34 之后循环数是 `ceil(线程数 / ASYNC_THREADS_PER_LOOP)`，不再恒为 1 ——
+    但「不是每个 worker 一个」这个意图不变，所以断言改成跟 `loop_count()` 对齐。
+    **匹配线程名用前缀**：线程名带上了分片序号，用 `==` 匹配会一个都匹配不到，
+    断言就变成空过（`test_close_is_idempotent` 当时正是这么假绿的）。
+    """
     respx.get("https://example.com/").mock(return_value=httpx.Response(200, text="ok"))
     results: list[str] = []
 
@@ -91,15 +98,25 @@ def test_many_worker_threads_share_one_loop(downloader: AsyncHttpxDownloader) ->
         t.join(timeout=5)
 
     assert results == ["ok"] * 12
-    loop_threads = [t for t in threading.enumerate() if t.name == "async-downloader"]
-    assert len(loop_threads) == 1
+    loop_threads = [t for t in threading.enumerate() if t.name.startswith("async-downloader")]
+    assert len(loop_threads) == loop_count()
+    assert len(loop_threads) < 12
 
 
 def test_close_is_idempotent() -> None:
-    dl = AsyncHttpxDownloader(concurrency=2)
+    """关两次不抛，且循环线程真的都收掉了。
+
+    ⚠️ 这条曾经假绿：线程名从 `async-downloader` 变成 `async-downloader-0` 之后，
+    `t.name == "async-downloader"` 一个都匹配不到，`not any(...)` 恒为真。
+    先建一个**多片**的下载器，确保「每一片都要收」这件事真被验到。
+    """
+    dl = AsyncHttpxDownloader(concurrency=2, loops=3)
+    assert sum(t.name.startswith("async-downloader") for t in threading.enumerate()) == 3
     dl.close()
     dl.close()  # 不抛
-    assert not any(t.name == "async-downloader" and t.is_alive() for t in threading.enumerate())
+    assert not any(
+        t.name.startswith("async-downloader") and t.is_alive() for t in threading.enumerate()
+    )
 
 
 @respx.mock
