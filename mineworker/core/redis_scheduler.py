@@ -98,7 +98,34 @@ class RedisScheduler(BaseScheduler):
     def _make_dedup(self) -> Filter:
         return get_request_filter(name=self._ns, redis_client=self._redis)
 
+    def _warn_if_dedup_is_process_local(self) -> None:
+        """分布式跑着进程内去重时出声 —— 那是个静默错配。
+
+        `DEDUP_FILTER` 默认是 `memory`（进程内布隆）。单机 AirSpider 下这没问题，
+        但分布式下每个节点各有一份指纹，**互相不知道**：
+
+        - 两个节点各自解析出同一个 URL 时会**重复抓**。实测两节点、两个入口页
+          都链到同一个页面：`memory` 下那个页面被抓 **2** 次，`redis` 下 1 次。
+        - Item 去重用的是同一个开关，于是任务被重放时（租约是**至少一次**语义，
+          节点卡住或被硬杀就会重放）**重复入库**。SQL 管道有唯一键兜底，
+          CSV / Mongo / 自定义管道没有。
+
+        大部分现象看起来仍然正常 —— 共享队列保证了「入了队的任务只被取走一次」，
+        所以错配不会报错，只会悄悄多抓、多写。`docs/distributed.md` 的示例里写着
+        `DEDUP_FILTER = "redis"`，但此前没设的人得不到任何提示。
+        """
+        backend = str(setting.DEDUP_FILTER).lower()
+        if backend in {"memory", "lite"}:
+            log.warning(
+                "DEDUP_FILTER={} 是**进程内**去重，分布式下每个节点各有一份指纹、"
+                "互相不知道：两个节点解析出同一个 URL 会重复抓，任务被重放时会重复入库。"
+                "改成 DEDUP_FILTER='redis'（布隆）或 'redis-set'（精确）。"
+                "确实只想要进程内去重的话，忽略这条即可。",
+                setting.DEDUP_FILTER,
+            )
+
     def _on_start(self) -> None:
+        self._warn_if_dedup_is_process_local()
         self._heartbeat = _Heartbeat(
             self._redis, self._hkey, self._node_id, self._local_pending, self._renew_leases
         )
