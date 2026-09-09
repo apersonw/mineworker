@@ -14,6 +14,7 @@ from mineworker.network.downloader._common import (
     ProxyClientCache,
     check_content_type,
     pick_proxy,
+    pool_limits,
     read_capped,
     report_bad_proxy,
     send_kwargs,
@@ -56,7 +57,11 @@ class HttpxDownloader(Downloader):
         verify: bool,
         cookies: dict[str, str] | None = None,
     ) -> httpx.Client:
-        kwargs: dict[str, Any] = {"follow_redirects": True, "verify": ssl_context_for(verify)}
+        kwargs: dict[str, Any] = {
+            "follow_redirects": True,
+            "verify": ssl_context_for(verify),
+            "limits": pool_limits(),
+        }
         if setting.HTTPX_HTTP2:
             kwargs["http2"] = True
         if proxy:
