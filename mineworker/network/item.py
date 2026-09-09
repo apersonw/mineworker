@@ -56,6 +56,11 @@ class Item:
         return type(self).__unique_key__
 
     @property
+    def _fingerprint_keys(self) -> list[str] | None:
+        """算指纹时用哪些字段。普通 Item 就是 `unique_key`。"""
+        return self.unique_key
+
+    @property
     def pipelines(self) -> list[str] | None:
         return self._pipelines if self._pipelines is not None else type(self).__pipelines__
 
@@ -74,7 +79,7 @@ class Item:
     @property
     def fingerprint(self) -> str:
         data = self.to_dict()
-        keys = self.unique_key or sorted(data)
+        keys = self._fingerprint_keys or sorted(data)
         parts = [f"{k}={data[k]!r}" for k in sorted(keys) if data.get(k) not in (None, "")]
         if not parts:  # unique_key 字段全空：退回全字段
             parts = [f"{k}={v!r}" for k, v in sorted(data.items())]
@@ -95,3 +100,19 @@ class UpdateItem(Item):
     @property
     def update_key(self) -> list[str]:
         return type(self).__update_key__ or self.unique_key or []
+
+    @property
+    def _fingerprint_keys(self) -> list[str] | None:
+        """`UpdateItem` 的指纹**永远按全字段算**，不看 `__unique_key__`。
+
+        它的语义就是「同一条记录、**新的值**」。指纹按 key 算的话，
+        第二次更新和第一次同指纹，会被去重直接吃掉 ——
+        实测同一个 sku 的价格 100 → 120 → 150，只有 100 写了出去。
+
+        按全字段算之后，内容**没变**的重复更新仍然会被挡住（同样的字段 → 同样的指纹），
+        「丢掉空转的重复」和「放行真实的变化」两件事同时成立。
+
+        注意只改**指纹**：`update_key` 仍然可以回退到 `unique_key` ——
+        那是「怎么写」，不是「要不要写」。
+        """
+        return None

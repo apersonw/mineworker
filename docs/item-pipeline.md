@@ -212,6 +212,18 @@ dump 出来的每行**带着回放所需的全部信息**，而不只是表名�
 
 ## UpdateItem
 
+!!! note "`UpdateItem` 的指纹按全字段算，不看 `__unique_key__`"
+    它的语义是「同一条记录、**新的值**」。指纹要是按 `__unique_key__` 算，
+    第二次更新和第一次同指纹，会被 [Item 去重](#去重)直接吃掉 ——
+    而去重默认是开着的。
+
+    所以 `UpdateItem` 的指纹**永远用全部非空字段**：值变了就写得进去，
+    值没变的空转重复仍然被挡住。两件事同时成立，不是二选一。
+
+    `__unique_key__` 在 `UpdateItem` 上仍然有用 —— 不写 `__update_key__` 时，
+    upsert 的匹配键会回退到它。那是「**怎么写**」，和「**要不要写**」是两个问题。
+
+
 !!! warning "SQL 管道是 UPDATE，不是 upsert"
     `MysqlPipeline` / `PostgresPipeline` 按 `__update_key__` 逐条 `UPDATE` ——
     **目标行不存在时什么都不会发生**。而 Mongo 是 `update_one(upsert=True)`、
