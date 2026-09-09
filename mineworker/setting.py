@@ -102,6 +102,9 @@ DUMP_UNFINISHED_ON_EXIT: bool = True  # 中断退出时把未完成请求 dump �
 REQUEST_TIMEOUT: float = 22.0
 RANDOM_USER_AGENT: bool = True
 USE_SESSION: bool = False
+# 开 USE_SESSION 且用代理池时，最多同时缓存多少个「每代理一个」的连接池。
+# 代理池可能有上千个代理，无上限缓存会把连接和文件描述符耗光
+SESSION_CACHE_SIZE: int = 16
 
 # ---- per-domain 限速（按域名分账）----
 CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不限
