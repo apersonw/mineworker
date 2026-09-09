@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### 测试
+
+- **「连接复用」的判据换成服务端计数。** 此前覆盖它的用例数的是**对象**
+  （建了几个 client / session），而 `test_end_to_end_session_reuse` 更是只断言
+  响应体内容 —— 把连接复用整个删掉，它照样通过。
+
+    代价是真实的：curl 下载器从来没有复用过一条连接，这个事实瞒过了 0.15.0 和 0.16.0。
+
+    新增 `tests/conn_counting_server.py`（数 accept 的 keep-alive 靶子）与
+    `tests/test_connection_reuse_truth.py`：三个下载器各自断言「N 个请求开了几条连接」，
+    并带阳性 / 阴性对照证明靶子分得出复用与不复用。curl 的「没有复用」也被钉成用例，
+    失败信息里写明该更新文档而不是删用例。
+
+
 ### 性能
 
 - **curl 下载器的 session 也按线程分片。** 共用一个 `curl_cffi.Session` 时，
