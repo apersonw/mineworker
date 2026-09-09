@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -40,7 +42,12 @@ class HttpxDownloader(Downloader):
         self._verify = verify
         self._proxy = proxy
         self._use_session = use_session
-        self._client: httpx.Client | None = None
+        # 按「实际使用的代理」缓存连接池。原来只有一个 `self._client`，
+        # 复用条件写的是 `proxy == self._proxy` —— 拿**配置**（下载器的固定代理）
+        # 去比**状态**（这次实际用的代理），开代理池时两者永远不等，
+        # 于是每个请求都新建一次 client。实测 5 个请求建了 5 个。
+        # 有界 LRU：代理池可能有上千个代理，不设上限就是把性能问题换成资源泄漏
+        self._clients: OrderedDict[str | None, httpx.Client] = OrderedDict()
 
     # ------------------------------------------------------------------
     def _make_client(
@@ -63,11 +70,25 @@ class HttpxDownloader(Downloader):
         proxy = pick_proxy(request, self._proxy)
         verify = request.requests_kwargs.get("verify", self._verify)
         cookies = request.requests_kwargs.get("cookies")
-        if self._use_session and not cookies and proxy == self._proxy and verify == self._verify:
-            if self._client is None:
-                self._client = self._make_client(self._proxy, self._verify)
-            return self._client, False, proxy
+        # 带 cookies 或改了 verify 的请求不能共用连接池 —— 那是每请求的状态
+        if self._use_session and not cookies and verify == self._verify:
+            return self._session_client(proxy), False, proxy
         return self._make_client(proxy, verify, cookies), True, proxy
+
+    def _session_client(self, proxy: str | None) -> httpx.Client:
+        """取这个代理对应的连接池，没有就建一个。超出上限时关掉最久没用的。"""
+        client = self._clients.get(proxy)
+        if client is not None:
+            self._clients.move_to_end(proxy)
+            return client
+        client = self._make_client(proxy, self._verify)
+        self._clients[proxy] = client
+        while len(self._clients) > max(setting.SESSION_CACHE_SIZE, 1):
+            # 换出时必须关掉，否则连接和 fd 就泄漏了
+            _, evicted = self._clients.popitem(last=False)
+            with contextlib.suppress(Exception):
+                evicted.close()
+        return client
 
     # ------------------------------------------------------------------
     def download(self, request: Request) -> Response:
@@ -93,6 +114,7 @@ class HttpxDownloader(Downloader):
         return Response.from_httpx(resp, request, content=content)
 
     def close(self) -> None:
-        if self._client is not None:
-            self._client.close()
-            self._client = None
+        for client in self._clients.values():
+            with contextlib.suppress(Exception):
+                client.close()
+        self._clients.clear()

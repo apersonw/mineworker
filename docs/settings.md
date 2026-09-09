@@ -18,6 +18,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 |---|---|---|
 | `SPIDER_THREAD_COUNT` | `4` | 工作线程数 |
 | `SPIDER_MAX_RETRY_TIMES` | `3` | 单请求最大重试次数 |
+| `SESSION_CACHE_SIZE` | `16` | 开 `USE_SESSION` 且用代理池时，最多缓存多少个「每代理一个」的连接池 |
 | `SPIDER_RETRY_INTERVAL` | `0.0` | 重试前等待秒数 |
 | `COLLECTOR_TASK_COUNT` | `100` | collector 单次从队列取多少任务 |
 | `DONE_CHECK_TIMES` / `DONE_CHECK_INTERVAL` | `3` / `0.5` | 结束检测的复查次数与间隔 |

@@ -98,7 +98,9 @@ def test_session_downloader_reuses_client() -> None:
     assert isinstance(downloader, HttpxDownloader)
     download_request(req)
     download_request(req)
-    assert downloader._client is not None
+    # 断言的是**复用**本身，不是某个内部字段还在不在：
+    # 两次请求只能留下一个连接池
+    assert len(downloader._clients) == 1
 
 
 def test_render_true_routes_to_playwright_downloader() -> None:
@@ -114,8 +116,8 @@ def test_explicit_downloader_and_context_manager() -> None:
     with HttpxDownloader(use_session=True) as dl:
         resp = Request("https://example.com/").download(dl)
         assert resp.text == "ok"
-        assert dl._client is not None
-    assert dl._client is None  # __exit__ 已 close
+        assert len(dl._clients) == 1
+    assert dl._clients == {}  # __exit__ 已 close
 
 
 # ---- USE_SESSION 曾是死配置（benchmark 里两行数字一模一样才暴露）------------
