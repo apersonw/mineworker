@@ -165,7 +165,22 @@ SPIDER_MAX_RUNTIME: float = 0.0
 # True = 普通请求走 AsyncHttpxDownloader：一个事件循环线程 + 共享 AsyncClient 承载所有在途连接
 # （连接池 / keep-alive / HTTP/2 被所有 worker 共享）。API 与线程模型不变。详见 docs/async-kernel.md
 DOWNLOADER_ASYNC: bool = False
-DOWNLOADER_ASYNC_CONCURRENCY: int = 200  # async 下载器的最大在途请求数（信号量 + 连接池上限）
+# async 下载器的信号量与连接池上限。
+# **它不是「实际在途数」** —— 实际在途由 SPIDER_THREAD_COUNT 决定：
+# 工作线程是同步阻塞地调 download() 的，一个线程同时只能有一个在途请求。
+# 实测默认 200 时均在途只有 3~18，这个值从没成为过约束。
+DOWNLOADER_ASYNC_CONCURRENCY: int = 200
+# 每个事件循环最多服务多少工作线程，超出就再开一个循环。
+#
+# 「一个事件循环线程 + N 个线程阻塞提交」这个模式在 N 超过 ~24 时会**坍塌**：
+# 实测 20 线程 342 QPS / 均在途 17.5，32 线程掉到 92 QPS / 均在途 4.7，
+# 48 线程 60 QPS。而且**与本框架的逻辑无关** —— 把框架整个拿掉、只留
+# 「一个 loop + N 线程 run_coroutine_threadsafe().result()」也一模一样地坍塌。
+# 按 16 线程一个循环分片后：32 线程 506 QPS（5.7×）、48 线程 349（5.5×）、
+# 64 线程 259（4.5×）。
+#
+# 设成 0 关闭分片（回到单个事件循环）。
+ASYNC_THREADS_PER_LOOP: int = 16
 HTTPX_HTTP2: bool = False  # httpx 开 HTTP/2（需 httpx[http2]），同步 / 异步下载器都生效
 
 # ---- 反爬：TLS / HTTP2 指纹伪装（需 pip install "mineworker[curl]"）----

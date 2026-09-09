@@ -56,7 +56,8 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RETRY_AFTER_MAX` | `60.0` | 429/503 的 `Retry-After` 最多认多久（秒）；超过判失败。`0` = 不读该头 |
 | `RETRY_BACKOFF` | `0.0` | 指数退避基数（秒），`0` = 关，沿用 `SPIDER_RETRY_INTERVAL` |
 | `DOWNLOADER_ASYNC` | `False` | 普通请求走 [`AsyncHttpxDownloader`](async-kernel.md)（共享连接池 / HTTP/2） |
-| `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器最大在途请求数 |
+| `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器的信号量与连接池上限。**不是实际在途数** —— 实际在途由 `SPIDER_THREAD_COUNT` 决定，见下 |
+| `ASYNC_THREADS_PER_LOOP` | `16` | 每个事件循环最多服务多少工作线程，超出再开一个；`0` = 不分片。见下 |
 | `HTTPX_HTTP2` | `False` | httpx 开 HTTP/2（需 `pip install "httpx[http2]"`） |
 | `DOWNLOADER_IMPERSONATE` | `""` | 伪装浏览器 TLS / HTTP2 指纹，填 `"chrome"` 等即启用（需 `pip install "mineworker[curl]"`），见[反爬对抗](anti-bot.md) |
 | `ANTIBOT_DETECT` | `True` | 识别 Cloudflare / Akamai 挑战页，命中抛 `AntiBotError`（走既有重试 + 换代理） |
@@ -147,3 +148,32 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 
 只影响同步 httpx 下载器。异步下载器跑在单个事件循环里、不存在这种线程争用；
 `curl_cffi` 用 libcurl 自己的连接池，机制不同，均未改动。
+
+## 异步下载器的事件循环分片
+
+`DOWNLOADER_ASYNC_CONCURRENCY` 曾被本文档描述成「最大在途请求数」，**那是错的**：
+工作线程是**同步阻塞**地调 `download()` 的，一个线程同时只有一个在途请求，
+所以实际在途由 `SPIDER_THREAD_COUNT` 决定。实测默认 200 时均在途只有 3~23，
+这个值从没成为过约束。
+
+更要紧的是：「一个事件循环线程 + N 个线程阻塞提交」这个模式在 N 超过 ~24 时会**坍塌**。
+实测（50ms 目标、每格 5 轮）：
+
+| 线程 | 8 | 16 | 20 | 24 | 32 | 48 | 200 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 单个循环 | 145 | 287 | 350 | 286 | **82** | **62** | **73** |
+| 按 16 线程分片 | 145 | 287 | 354 | 417 | **452** | **318** | **421** |
+| 同步下载器（对照） | 118 | 194 | 223 | 246 | 287 | 344 | 463 |
+
+坍塌时均在途从 18 掉到 4 —— 请求近乎串行。**这与本框架的逻辑无关**：
+把框架整个拿掉、只留一个事件循环加 N 个线程反复
+`run_coroutine_threadsafe(...).result()`，坍塌一模一样。所以只能多开几个循环。
+
+- 线程数 ≤ `ASYNC_THREADS_PER_LOOP` 时只开一个循环，**与分片前完全一致**
+  （框架默认 `SPIDER_THREAD_COUNT=4`，落在这一档）
+- 每片是**独立**的事件循环、`AsyncClient`、信号量和代理连接池 ——
+  `AsyncClient` 绑定在创建它的循环上，不能跨片用
+- 设 `ASYNC_THREADS_PER_LOOP = 0` 回到单个事件循环
+
+即便分片之后，`DOWNLOADER_ASYNC` 相对同步下载器的优势也只在**中等线程数**（≤32）成立；
+48 线程往上两者接近，200 线程时同步略胜。它不是「线程越多越值」的开关。
