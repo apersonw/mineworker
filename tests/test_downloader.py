@@ -117,7 +117,7 @@ def test_explicit_downloader_and_context_manager() -> None:
         resp = Request("https://example.com/").download(dl)
         assert resp.text == "ok"
         assert len(dl._clients) == 1
-    assert dl._clients == {}  # __exit__ 已 close
+    assert len(dl._clients) == 0  # __exit__ 已 close
 
 
 # ---- USE_SESSION 曾是死配置（benchmark 里两行数字一模一样才暴露）------------

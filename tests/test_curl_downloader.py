@@ -141,12 +141,15 @@ def test_session_reuse_keeps_one_session(httpserver: HTTPServer) -> None:
     dl = CurlDownloader(use_session=True)
     try:
         dl.download(Request(httpserver.url_for("/s")))
-        first = dl._session
+        first, _, _ = dl._session_for(Request(httpserver.url_for("/s")))
         dl.download(Request(httpserver.url_for("/s")))
-        assert dl._session is first is not None
+        again, _, _ = dl._session_for(Request(httpserver.url_for("/s")))
+        # 断言的是复用本身，不是某个内部字段 —— 后者一重构就误报，
+        # 而真正该守的行为反而没人守
+        assert again is first
     finally:
         dl.close()
-    assert dl._session is None
+    assert len(dl._sessions) == 0
 
 
 def test_close_is_idempotent() -> None:

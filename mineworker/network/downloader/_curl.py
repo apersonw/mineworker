@@ -9,10 +9,12 @@ libcurl-impersonate，能复刻真实浏览器的握手，从这一层解决问�
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any, cast
 
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
+    ProxyClientCache,
     check_content_type,
     pick_proxy,
     read_capped,
@@ -63,7 +65,9 @@ class CurlDownloader(Downloader):
         self._proxy = proxy
         self._use_session = use_session
         self._impersonate = impersonate
-        self._session: CurlSession | None = None
+        # 按实际使用的代理缓存，而不是拿下载器的固定代理去比 ——
+        # 后者在开代理池时永远不相等，于是每个请求都新建一个 session
+        self._sessions = ProxyClientCache()
 
     # ------------------------------------------------------------------
     def _make_session(
@@ -85,11 +89,19 @@ class CurlDownloader(Downloader):
         proxy = pick_proxy(request, self._proxy)
         verify = request.requests_kwargs.get("verify", self._verify)
         cookies = request.requests_kwargs.get("cookies")
-        if self._use_session and not cookies and proxy == self._proxy and verify == self._verify:
-            if self._session is None:
-                self._session = self._make_session(self._proxy, self._verify)
-            return self._session, False, proxy
+        if self._use_session and not cookies and verify == self._verify:
+            return self._session_for_proxy(proxy), False, proxy
         return self._make_session(proxy, verify, cookies), True, proxy
+
+    def _session_for_proxy(self, proxy: str | None) -> CurlSession:
+        session = self._sessions.get(proxy)
+        if session is not None:
+            return session  # type: ignore[no-any-return]
+        session = self._make_session(proxy, self._verify)
+        for evicted in self._sessions.put(proxy, session):
+            with contextlib.suppress(Exception):
+                evicted.close()
+        return session
 
     # ------------------------------------------------------------------
     def download(self, request: Request) -> Response:
@@ -125,6 +137,6 @@ class CurlDownloader(Downloader):
         return Response.from_curl_cffi(resp, request, content=content)
 
     def close(self) -> None:
-        if self._session is not None:
-            self._session.close()
-            self._session = None
+        for session in self._sessions.drain():
+            with contextlib.suppress(Exception):
+                session.close()

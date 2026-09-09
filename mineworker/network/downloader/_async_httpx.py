@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,7 @@ import httpx
 from mineworker import setting
 from mineworker.exceptions import RequestError
 from mineworker.network.downloader._common import (
+    ProxyClientCache,
     apick_proxy,
     check_content_type,
     read_capped,
@@ -78,6 +80,9 @@ class AsyncHttpxDownloader(Downloader):
         )
         self._thread.start()
         self._client: httpx.AsyncClient | None = None
+        # 有代理时原来每个请求建一个一次性 client —— 一轮全新的 TLS 握手 +
+        # 代理隧道。实测 5 个请求建 5 个。改成按代理缓存复用
+        self._proxied = ProxyClientCache()
         self._sem: asyncio.Semaphore | None = None
         self._submit(self._setup())
 
@@ -104,6 +109,20 @@ class AsyncHttpxDownloader(Downloader):
     def download(self, request: Request) -> Response:
         return self._submit(self._download(request))  # type: ignore[no-any-return]
 
+    async def _client_for_proxy(self, proxy: str, verify: Any) -> httpx.AsyncClient:
+        """这个代理对应的连接池。换出的要 `await aclose()` —— 异步 client 的关法
+        和同步不一样，在同步上下文里调 close() 会留下没关的连接。"""
+        client = self._proxied.get(proxy)
+        if client is not None:
+            return client  # type: ignore[no-any-return]
+        client = httpx.AsyncClient(
+            follow_redirects=True, verify=ssl_context_for(verify), proxy=proxy
+        )
+        for evicted in self._proxied.put(proxy, client):
+            with contextlib.suppress(Exception):
+                await evicted.aclose()
+        return client
+
     async def _download(self, request: Request) -> Response:
         assert self._client is not None and self._sem is not None
         kwargs = send_kwargs(request, self._timeout)
@@ -113,17 +132,20 @@ class AsyncHttpxDownloader(Downloader):
 
         async with self._sem:
             try:
-                if proxy is not None or cookies:
+                if cookies:
+                    # 带 cookies 是每请求的状态，不能共用连接池 —— 用完即弃
                     one_shot: dict[str, Any] = {
                         "follow_redirects": True,
                         "verify": ssl_context_for(verify),
+                        "cookies": cookies,
                     }
                     if proxy is not None:
                         one_shot["proxy"] = proxy
-                    if cookies:
-                        one_shot["cookies"] = cookies
                     async with httpx.AsyncClient(**one_shot) as client:
                         resp, content = await _stream(client, request, kwargs)
+                elif proxy is not None:
+                    client = await self._client_for_proxy(proxy, verify)
+                    resp, content = await _stream(client, request, kwargs)
                 else:
                     resp, content = await _stream(self._client, request, kwargs)
             except httpx.HTTPError as exc:
@@ -146,6 +168,9 @@ class AsyncHttpxDownloader(Downloader):
             self._loop.close()
 
     async def _aclose(self) -> None:
+        for client in self._proxied.drain():
+            with contextlib.suppress(Exception):
+                await client.aclose()
         if self._client is not None:
             await self._client.aclose()
             self._client = None
