@@ -64,6 +64,12 @@ NewsSpider(keep_alive=True).start()
 REDIS_URL = "redis://:password@host:6379/0"
 REDIS_KEY_PREFIX = "mineworker"      # 所有 key 的前缀
 DEDUP_FILTER = "redis"               # redis（布隆）| redis-set（精确）
+# ⚠️ **别用默认的 memory / lite**：那是**进程内**去重，每个节点各有一份指纹、
+# 互相不知道。实测两节点、两个入口页都链到同一页面：memory 下那页被抓 2 次、
+# redis 下 1 次；而任务租约是「至少一次」语义，Item 去重不共享就会重复入库
+# （SQL 管道有唯一键兜底，CSV / Mongo / 自定义管道没有）。
+# 共享队列会让大部分现象看起来正常，所以这个错配不报错、只是悄悄多抓多写 ——
+# 0.18.0 起启动时会为此告警。
 SPIDER_SEED_LOCK_TTL = 86400         # 种子锁 TTL（秒）；过期后下次启动会重新注入种子
 HEARTBEAT_INTERVAL = 3.0
 HEARTBEAT_STALE = 15.0               # 超过这个秒数没心跳的节点视为已死

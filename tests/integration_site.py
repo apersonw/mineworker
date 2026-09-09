@@ -11,6 +11,8 @@
 - `/boom/500` → 验重试次数（必须是 1 + SPIDER_MAX_RETRY_TIMES 次）
 - `/boom/429` **前两次返回 429、第三次放行** → 验重试真的重试了而不是直接放弃
 - `/gz` 返回 gzip → 验解压
+- `/a` 与 `/b` **都链到 `/shared`** → 验跨进程去重：两个节点各解析一个入口时，
+  进程内去重（`DEDUP_FILTER=memory`）互相不知道，`/shared` 会被抓两次
 
 用法见 `tests/test_full_stack_integration.py`。
 """
@@ -64,6 +66,16 @@ class Site:
                     links += '<a href="/boom/500">e5</a><a href="/boom/404">e4</a>'
                     links += '<a href="/boom/429">e9</a><a href="/gz">gz</a>'
                     return self._send(200, f"<html><body>{links}</body></html>".encode())
+                # /a 和 /b 都链到 /shared —— 两个节点各解析一个时，
+                # 进程内去重互相不知道，/shared 会被抓两次
+                if path in ("/a", "/b"):
+                    return self._send(200, b'<html><body><a href="/shared">s</a></body></html>')
+                if path == "/shared":
+                    return self._send(
+                        200,
+                        b'<html><body><h1 class="t">shared</h1>'
+                        b'<span class="p">0</span></body></html>',
+                    )
                 if path.startswith("/item/"):
                     if outer.slow:
                         time.sleep(outer.slow)
