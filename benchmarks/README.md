@@ -130,3 +130,32 @@ RSS 在 ~127MB 收敛。**没有泄漏** —— 前期增长是分配器 arena �
    **矩阵里两个维度给出完全相同的数字时，先怀疑维度没接上，别急着解释。**
 
 结论见 [docs/async-kernel.md](../docs/async-kernel.md#实测2026-09)。
+
+## 压测代理:一律用 tinyproxy
+
+需要真代理时用 `benchmarks/proxylab.py`,**别自己写**——手写过三次三次都坏,
+第一版不支持 keep-alive,恰好抵消了当时要测的「连接复用」。
+
+```bash
+brew install tinyproxy
+```
+
+```python
+from proxylab import proxy
+with proxy() as url:          # http://127.0.0.1:<随机端口>
+    ...
+```
+
+选它是量出来的(128 并发 · 50ms · 共用 client):
+
+| | QPS | 峰值在途 |
+|---|---:|---:|
+| 直连 | 535 | 128 |
+| **tinyproxy** | **517**(吃 3%) | 128 |
+| mitmdump | 372 | 79 |
+
+mitmdump 自己就是瓶颈,在途连 79 都撑不住,拿它测框架等于测它。
+
+两个坑写在 `proxylab.py` 的文档里:配置**不能写 `ConnectPort`**(写了就只放行
+443/563,https 靶子在随机高端口会被拒);**每次跑换一个新实例**,复用同一个会让
+先跑的那一臂把 TIME_WAIT 堆给后跑的那一臂——这让我报过一次不存在的回归。
