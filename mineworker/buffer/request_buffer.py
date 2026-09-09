@@ -78,21 +78,36 @@ class RequestBuffer(threading.Thread):
             batch = self._pending
             self._pending = []
         for i, request in enumerate(batch):
-            if request.filter_repeat and not self._dedup.add(request.fingerprint):
+            try:
+                fresh = self._dedup.add(request.fingerprint) if request.filter_repeat else True
+            except Exception:
+                # 写指纹也是一次 Redis 调用，和下面的入队一样会抖。
+                # 这一条**没写成指纹**，所以放回时要保留 filter_repeat
+                self._requeue(batch[i:], first_passed_dedup=False)
+                raise
+            if not fresh:
                 self._stats.incr(stats_keys.DEDUP_DROPPED)
                 continue
             try:
                 self._queue.put(request)
             except Exception:
-                # 这一条和它后面的都还没入队，整体放回缓冲区
-                self._requeue(batch[i:])
+                # 这一条和它后面的都还没入队，整体放回缓冲区。
+                # 这一条**已经写成指纹**了，放回时要清掉 filter_repeat
+                self._requeue(batch[i:], first_passed_dedup=True)
                 raise
 
-    def _requeue(self, requests: list[Request]) -> None:
-        """把没能入队的请求放回缓冲区头部，保持原有顺序（优先级靠队列自己排）。"""
-        for request in requests:
-            # 已经过过去重了；不清掉的话下一轮会被自己刚写的指纹挡掉
-            request.filter_repeat = False
+    def _requeue(self, requests: list[Request], *, first_passed_dedup: bool) -> None:
+        """把没能入队的请求放回缓冲区头部，保持原有顺序（优先级靠队列自己排）。
+
+        只有**第一条**可能已经过了去重 —— 它的指纹写成了、失败发生在入队那一步。
+        它必须清掉 `filter_repeat`，否则下一轮会被自己刚写的指纹挡掉（v4.7 修的就是这个）。
+
+        后面那些根本没走到去重。**它们必须保留 `filter_repeat`** ——
+        一起清掉的话，重复 URL 会绕过去重进队列。
+        实测：批次里两条相同 URL、`put` 抖一次，同一个 URL 进队列 2 次。
+        """
+        if first_passed_dedup and requests:
+            requests[0].filter_repeat = False
         with self._lock:
             self._pending[:0] = requests
 
