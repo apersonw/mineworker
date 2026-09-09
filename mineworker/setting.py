@@ -118,6 +118,14 @@ SESSION_CACHE_SIZE: int = 16
 # **分片不改变 cookie 语义**：同一个代理的所有分片共用一个 CookieJar
 # （httpx 收到裸 CookieJar 时按引用使用，且 CookieJar 自带锁）。
 SESSION_SHARD_THREADS: int = 32
+# curl 下载器的同名阈值 —— **拐点是分别量出来的，不是同一个数**。
+# curl 共用一个 Session 时从 16 线程起就不再增长（8/16/32/48/64 线程：
+# 133 / 235 / 238 / 237 / 242 QPS），按 16 分片后 133 / 238 / 391 / 517 / 589。
+#
+# ⚠️ 注意这里买到的**不是连接复用**：curl 这条路径压根没有连接复用
+# （框架永远用 stream=True，而 curl_cffi 收尾时会关掉整个 Curl 句柄）。
+# `use_session` 在 curl 这边只带来 cookie 持久化；分片省掉的是「共用的代价」。
+CURL_SESSION_SHARD_THREADS: int = 16
 
 # ---- per-domain 限速（按域名分账）----
 CONCURRENT_REQUESTS_PER_DOMAIN: int = 8  # 单域最大在途请求数；0 = 不限
