@@ -24,6 +24,7 @@ from mineworker.network.downloader._common import (
     ProxyClientCache,
     apick_proxy,
     check_content_type,
+    pool_limits,
     read_capped,
     report_bad_proxy,
     send_kwargs,
@@ -115,8 +116,13 @@ class AsyncHttpxDownloader(Downloader):
         client = self._proxied.get(proxy)
         if client is not None:
             return client  # type: ignore[no-any-return]
+        # 主 client 早就配了 limits，这条「每代理」的路径却没有 —— 同一个文件里
+        # 两条构造路径不一致，而开代理池时走的恰恰是没配的那条
         client = httpx.AsyncClient(
-            follow_redirects=True, verify=ssl_context_for(verify), proxy=proxy
+            follow_redirects=True,
+            verify=ssl_context_for(verify),
+            proxy=proxy,
+            limits=pool_limits(self._concurrency),
         )
         for evicted in self._proxied.put(proxy, client):
             with contextlib.suppress(Exception):
