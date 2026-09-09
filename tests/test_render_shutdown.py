@@ -73,8 +73,7 @@ def test_queued_requests_do_not_hang_their_callers(stub_browser: Any) -> None:
         t.join(timeout=max(0.0, deadline - time.monotonic()))
     hung = [i for i, t in enumerate(threads) if t.is_alive()]
     assert not hung, (
-        f"关闭 5 秒后仍有 {len(hung)} 个调用线程没返回 —— "
-        "停止爬虫时它们 join 不掉，优雅停止失效"
+        f"关闭 5 秒后仍有 {len(hung)} 个调用线程没返回 —— 停止爬虫时它们 join 不掉，优雅停止失效"
     )
     assert len(results) == 5
 

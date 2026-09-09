@@ -270,9 +270,7 @@ class ParserWorker(threading.Thread):
             time.sleep(delay)
         self._request_buffer.put_retry(request)
 
-    def _retry_replacement(
-        self, request: Request, retry: Request, response: Response
-    ) -> None:
+    def _retry_replacement(self, request: Request, retry: Request, response: Response) -> None:
         """中间件把响应换成了一个新请求（「掉登录，换号重试」那种）。
 
         这条路原本既不递增 `retry_times` 也不走 `_retry_or_fail`，而中间件还会清掉
