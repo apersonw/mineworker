@@ -18,7 +18,8 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 |---|---|---|
 | `SPIDER_THREAD_COUNT` | `4` | 工作线程数 |
 | `SPIDER_MAX_RETRY_TIMES` | `3` | 单请求最大重试次数 |
-| `SESSION_CACHE_SIZE` | `16` | 开 `USE_SESSION` 且用代理池时，最多缓存多少个「每代理一个」的连接池 |
+| `SESSION_CACHE_SIZE` | `16` | 开 `USE_SESSION` 且用代理池时，最多缓存多少个代理的连接池（分片后上限按片数自动放大） |
+| `SESSION_SHARD_THREADS` | `32` | 每个代理连接池最多服务多少线程，超出再开一片；`0` = 不分片。见下方说明 |
 | `SPIDER_RETRY_INTERVAL` | `0.0` | 重试前等待秒数 |
 | `COLLECTOR_TASK_COUNT` | `100` | collector 单次从队列取多少任务 |
 | `DONE_CHECK_TIMES` / `DONE_CHECK_INTERVAL` | `3` / `0.5` | 结束检测的复查次数与间隔 |
@@ -30,7 +31,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 |---|---|---|
 | `REQUEST_TIMEOUT` | `22.0` | 秒 |
 | `RANDOM_USER_AGENT` | `True` | 自动注入随机 UA |
-| `USE_SESSION` | `False` | 复用 httpx 连接（连同 cookie jar）。实测再增约 1.2× 吞吐；注意开启后 cookie 会跨请求共享 |
+| `USE_SESSION` | `False` | 复用 httpx 连接（连同 cookie jar）。收益随线程数变化，见下表；注意开启后 cookie 会跨请求共享 |
 | `DOWNLOADER_MIDDLEWARES` | `[]` | 下载中间件点号路径 |
 | `CONCURRENT_REQUESTS_PER_DOMAIN` | `8` | 单域最大在途；`0` = 不限。**进程内生效**，见[限速](spider.md#限速) |
 | `DOWNLOAD_DELAY` | `0.0` | 同域两次请求最小间隔（秒）；`0` = 不限。默认进程内生效，见 `GLOBAL_THROTTLE` |
@@ -121,3 +122,28 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `LOG_LEVEL` | `"INFO"` |
 | `LOG_FILE` | `None`（只输出到 stderr） |
 | `LOG_ROTATION` / `LOG_RETENTION` | `"50 MB"` / `"10 days"` |
+
+## 连接复用与分片
+
+`USE_SESSION` 的收益**不是一个固定倍数**。一个 `httpx.Client` 被太多线程共用时，
+连接池自己会成为争用点。实测（https 目标、走本机代理、靶子天花板已用裸 asyncio
+客户端确认远高于被测）：
+
+| 线程 | 16 | 32 | 48 | 64 | 96 |
+|---|---:|---:|---:|---:|---:|
+| 共用一个 client | 269 | 444 | **248** | **172** | **105** |
+| 按 32 线程分片 | 269 | 451 | **563** | **492** | **434** |
+| 每请求新建（不开 session） | 173 | 203 | 243 | 249 | 265 |
+
+共用一个 client 在 ~32 线程见顶后**掉头向下**，48 线程往上甚至比不开 session 还慢。
+`SESSION_SHARD_THREADS`（默认 32，即实测拐点）让每个代理按需开多片连接池，
+把这一段补回来。
+
+- 线程数 ≤ `SESSION_SHARD_THREADS` 时只有一片，**与不分片完全一致**
+  （框架默认 `SPIDER_THREAD_COUNT=4`，落在这一档）
+- **分片不改变 cookie 语义**：同一个代理的所有分片共用一个 `CookieJar`
+- 不同代理之间 cookie 仍然隔离，与分片前一致
+- 设 `SESSION_SHARD_THREADS = 0` 回到「每代理一个 client」
+
+只影响同步 httpx 下载器。异步下载器跑在单个事件循环里、不存在这种线程争用；
+`curl_cffi` 用 libcurl 自己的连接池，机制不同，均未改动。

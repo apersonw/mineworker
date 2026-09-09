@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import ssl
 import threading
 import time
@@ -76,6 +77,39 @@ def pool_limits(concurrency: int | None = None) -> httpx.Limits:
     return httpx.Limits(max_connections=max(n, 100), max_keepalive_connections=max(n, 20))
 
 
+_shard_ids = threading.local()
+_shard_counter = itertools.count()
+
+
+def shard_count(concurrency: int | None = None) -> int:
+    """一个代理要开几片连接池。
+
+    一个 `httpx.Client` 被太多线程共用时，连接池自己成为争用点 —— 吞吐到
+    ~32 线程见顶后**掉头向下**（实测 48/64/96 线程：248 / 172 / 105 QPS，
+    比每请求新建还慢）。按 `SESSION_SHARD_THREADS` 分片后：563 / 492 / 434。
+    """
+    per_shard = setting.SESSION_SHARD_THREADS
+    if per_shard <= 0:
+        return 1
+    n = max(concurrency if concurrency is not None else setting.SPIDER_THREAD_COUNT, 1)
+    return max(1, -(-n // per_shard))
+
+
+def shard_index(shards: int) -> int:
+    """本线程用哪一片。
+
+    用自增序号而不是 `get_ident() % K` —— 线程 id 是任意值，取模未必均匀，
+    分片不均等于没分。
+    """
+    if shards <= 1:
+        return 0
+    idx = getattr(_shard_ids, "idx", None)
+    if idx is None:
+        idx = next(_shard_counter)
+        _shard_ids.idx = idx
+    return int(idx) % shards
+
+
 class ProxyClientCache:
     """按「实际使用的代理」缓存连接池，有界 LRU。
 
@@ -95,7 +129,9 @@ class ProxyClientCache:
     def __len__(self) -> int:
         return len(self._items)
 
-    def get_or_create(self, proxy: str | None, factory: Callable[[], Any]) -> tuple[Any, list[Any]]:
+    def get_or_create(
+        self, proxy: str | None, factory: Callable[[], Any], capacity: int | None = None
+    ) -> tuple[Any, list[Any]]:
         """原子的「取或建」。返回 (要用的对象, **调用方需要关掉**的对象列表)。
 
         原来这里是分开的 `get()` / `put()`，调用方写成无锁的「查 → 建 → 存」：
@@ -118,7 +154,10 @@ class ProxyClientCache:
             client = factory()
             self._items[proxy] = client
             evicted = []
-            while len(self._items) > max(setting.SESSION_CACHE_SIZE, 1):
+            # 分片之后一个代理占 K 个槽位，上限要跟着放大，
+            # 否则 SESSION_CACHE_SIZE 的含义会从「缓存几个代理」悄悄变成「几个分片」
+            limit = max(capacity if capacity is not None else setting.SESSION_CACHE_SIZE, 1)
+            while len(self._items) > limit:
                 _, old = self._items.popitem(last=False)
                 evicted.append(old)
             return client, evicted
