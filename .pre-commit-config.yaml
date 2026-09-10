@@ -21,4 +21,16 @@ repos:
         args: [--fix]
       - id: ruff-format
 
+  # 只在动了文档时才跑，平时零开销。CI 的 docs job 用的是 `mkdocs build --strict`，
+  # 一条解析不了的站内链接就会红 —— 而 ruff/mypy/pytest 四条检查全都看不见它，
+  # 于是「本地全绿、推上去 CI 红」。本地没装 docs extra 的人会跳过，CI 仍是兜底。
+  - repo: local
+    hooks:
+      - id: mkdocs-strict
+        name: mkdocs build --strict（仅当 docs/ 或 mkdocs.yml 有改动）
+        entry: scripts/mkdocs_strict.sh
+        language: system
+        files: ^(docs/.*|mkdocs\.yml)$
+        pass_filenames: false
+
 # mypy 只在 CI 跑：本地 pre-commit 装全部类型依赖会拖慢提交
