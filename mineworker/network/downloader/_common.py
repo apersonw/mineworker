@@ -100,8 +100,16 @@ def shard_count(concurrency: int | None = None, per_shard: int | None = None) ->
     而分片后是 391）。
 
     一个 `httpx.Client` 被太多线程共用时，连接池自己成为争用点 —— 吞吐到
-    ~32 线程见顶后**掉头向下**（实测 48/64/96 线程：248 / 172 / 105 QPS，
-    比每请求新建还慢）。按 `SESSION_SHARD_THREADS` 分片后：563 / 492 / 434。
+    **32 线程见顶后掉头向下**。三种环境各跑 5 轮（https 靶子，共用一个 client）：
+
+        线程        16    32    48    64    96
+        直连       287   486   282   185   106
+        squid      284   474   288   186   109
+        tinyproxy  280   475   282   184   108
+
+    三条曲线几乎重合，峰都在 32 —— 所以 `SESSION_SHARD_THREADS` 默认取 32。
+    **而且这个争用与连接保活无关**：squid 全程复用、tinyproxy 端到端不保活，
+    曲线一模一样，说明卡的是连接池的锁而不是连接本身。
     """
     per_shard = setting.SESSION_SHARD_THREADS if per_shard is None else per_shard
     if per_shard <= 0:
