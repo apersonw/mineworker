@@ -125,7 +125,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `LOG_FILE` | `None`（只输出到 stderr） |
 | `LOG_ROTATION` / `LOG_RETENTION` | `"50 MB"` / `"10 days"` |
 
-## 连接复用与分片
+## `USE_SESSION` 与分片
 
 `USE_SESSION` 的收益**不是一个固定倍数**。一个 `httpx.Client` 被太多线程共用时，
 连接池自己会成为争用点。实测（https 目标、走本机代理、靶子天花板已用裸 asyncio
@@ -146,6 +146,24 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 - **分片不改变 cookie 语义**：同一个代理的所有分片共用一个 `CookieJar`
 - 不同代理之间 cookie 仍然隔离，与分片前一致
 - 设 `SESSION_SHARD_THREADS = 0` 回到「每代理一个 client」
+
+### ⚠️ 这个收益**不是**「连接复用」
+
+早先这一节叫「连接复用与分片」，把收益说成复用连接，**那是错的**。
+同一套 A/B 换一个**真会保活**的代理（squid）重量，结果几乎一模一样：
+
+| 线程 | 8 | 16 | 32 |
+|---|---:|---:|---:|
+| squid（客户端→代理、代理→靶子**都复用**） | 1.23× | 1.87× | 2.22× |
+| tinyproxy（端到端**都不保活**） | 1.21× | 1.87× | 2.13× |
+
+连接有没有被真正复用，对结果没有影响。真正省掉的是**每请求构造 / 销毁
+`httpx.Client`**：单线程下这笔账是 5.1ms/请求（其中构造+关闭只占 0.78ms），
+而 16 线程下实测差距约 50ms/请求 —— 并发把它放大了一个数量级，
+**放大的机制尚未隔离出来**，这里不做进一步猜测。
+
+（`use_session=True` 本身确实会复用连接 —— 直连时 6 个请求只开 1 条，
+见 `tests/test_connection_reuse_truth.py`。上面说的是「这组吞吐数字的来源」。）
 
 只影响同步 httpx 下载器。异步下载器跑在单个事件循环里、不存在这种线程争用；
 `curl_cffi` 用 libcurl 自己的连接池，机制不同，均未改动。
