@@ -66,9 +66,14 @@ def pool_limits(concurrency: int | None = None) -> httpx.Limits:
     走代理 + https 时，每次重建 = 一次 CONNECT 隧道 + 一次完整 TLS 握手，
     「按代理复用连接」那套缓存在这里等于白做。
 
-    实测（32 线程、https 靶子、本机 tinyproxy、7 轮）：只把 keepalive 从 20 提到
-    100（``max_connections`` 保持默认 100 不动），281 → 499 QPS。默认配置下还观察到
+    实测（32 线程、https 靶子、7 轮）：只把 keepalive 从 20 提到 100
+    （``max_connections`` 保持默认 100 不动），281 → 499 QPS。默认配置下还观察到
     一个近乎串行的坏模式（~17 QPS，5 次），配了上限之后 14 轮一次都没再出现。
+
+    ⚠️ **这组数字是在 tinyproxy 后面量的，而它端到端都不保活**（见
+    `benchmarks/proxylab.py`）。既然没有连接被保活，`max_keepalive_connections`
+    为什么还能改变吞吐，**目前没有解释**。上面那个坏模式和这个提升都复现得很稳，
+    但归因存疑 —— 要重新量请用 `benchmarks/squidlab.py`（squid 会保活）。
 
     两个值都只增不减 —— 低于 httpx 默认值的配置一律按默认值走，
     免得给小并发的部署带来意外的收紧。

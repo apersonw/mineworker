@@ -11,6 +11,12 @@
 
 装：``brew install tinyproxy``。
 
+⚠️ **tinyproxy 不保活，别拿它量「连接复用」**：它把响应里的
+`Connection: keep-alive` 剥掉，客户端每个请求都重新建连（实测靶子
+6 个请求接受了 6 条连接，而直连只接受 1 条）。要量复用请用
+`squidlab.py`。做别的压测（并发、争用、代理开销）它仍然合适 ——
+上面那组选型数字就是这么量的。
+
 用法::
 
     with proxy() as url:            # url 形如 http://127.0.0.1:54321
