@@ -146,3 +146,42 @@ def test_sharded_sessions_still_reuse_within_a_shard(
     assert server.connections == 1, (
         f"同一个线程连发 {N} 次却开了 {server.connections} 条 —— 分片键跟着请求变了"
     )
+
+
+def _as_proxy(server: ConnCountingServer) -> str:
+    """把计数靶子当代理用 —— 它不解析请求行，照样数得清入站连接。"""
+    return server.url.rstrip("/")
+
+
+def test_session_reuses_the_connection_to_the_proxy(server: ConnCountingServer) -> None:
+    """`USE_SESSION` 复用的是**客户端→代理**那条腿。
+
+    走代理时框架的连接池只管这条腿（代理→目标那条腿它碰不到），而此前所有
+    复用用例数的都是**直连**。v4.40 在代理环境下对复用得出过一个错误结论，
+    却没有任何用例数过这条腿 —— 补上。
+    """
+    dl = HttpxDownloader(timeout=10, verify=False, proxy=_as_proxy(server), use_session=True)
+    try:
+        _hit(dl, "http://example.invalid/p")
+    finally:
+        dl.close()
+    assert server.connections == 1, (
+        f"{N} 个请求对代理开了 {server.connections} 条连接 —— 客户端→代理这条腿没有复用"
+    )
+
+
+def test_without_session_each_request_reconnects_to_the_proxy(
+    server: ConnCountingServer,
+) -> None:
+    """阴性对照：不开 session 时，每个请求都要重连一次代理。
+
+    没有这一半，上一条用例在「框架压根不发请求」时也会绿。
+    """
+    dl = HttpxDownloader(timeout=10, verify=False, proxy=_as_proxy(server), use_session=False)
+    try:
+        _hit(dl, "http://example.invalid/p")
+    finally:
+        dl.close()
+    assert server.connections == N, (
+        f"不开 session 却只对代理开了 {server.connections} 条连接（应为 {N}）"
+    )
