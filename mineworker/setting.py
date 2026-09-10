@@ -232,6 +232,13 @@ PROXY_WAIT_TIMEOUT: float = 30.0
 # 距上次失败超过封顶值即视为已恢复，退避重新从头算。
 PROXY_BAN_SECONDS: float = 60.0
 PROXY_BAN_MAX_SECONDS: float = 900.0  # 退避上限；PROXY_BAN_SECONDS=0 则回到「永久拉黑」
+# **不是所有失败都算代理的错。** 读超时 / 连接重置 / 响应畸形，既可能是代理挂了，
+# 也可能是目标站自己慢或坏 —— 而下载器原先一律 `report_bad`，于是三个请求打一个
+# 慢 URL 就能把整池健康代理清空（实测：三个代理各自成功转发了请求，仍全被冷却 60s，
+# 之后每个请求都要等满 PROXY_WAIT_TIMEOUT 才失败）。
+# 现在只有**连接不上代理**这类错才立刻拉黑；上述「说不清是谁的错」的失败要连续
+# 攒够这个数才拉黑，中间只要成功一次就清零。
+PROXY_SUSPECT_BAN_AFTER: int = 3
 # 等不到代理时是否允许直连。默认 False：静默直连会把源 IP 暴露给目标站，
 # 而那正是开代理池要避免的。设成 True 就是明确接受「有代理就用、没有就直连」
 PROXY_ALLOW_DIRECT: bool = False

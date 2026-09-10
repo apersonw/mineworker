@@ -20,7 +20,8 @@ from mineworker.network.downloader._common import (
     check_content_type,
     pick_proxy,
     read_capped,
-    report_bad_proxy,
+    report_good_proxy,
+    report_proxy_failure,
     resolve_impersonate,
     send_kwargs,
     shard_count,
@@ -188,11 +189,13 @@ class CurlDownloader(Downloader):
                 resp.close()
         except _requests().RequestsError as exc:
             if proxy:
-                report_bad_proxy(proxy)
+                report_proxy_failure(proxy, exc)
             raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
         finally:
             if should_close:
                 session.close()
+        if proxy:
+            report_good_proxy(proxy)  # 成功一次就把连续失败计数清零
         return Response.from_curl_cffi(resp, request, content=content)
 
     def close(self) -> None:

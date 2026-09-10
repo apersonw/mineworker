@@ -61,6 +61,37 @@ PROXY_ALLOW_DIRECT = False     # True 才允许「没代理就直连」
 池空时（且距上次拉取超过 `PROXY_MIN_INTERVAL`）重新拉取。
 
 自定义代理池：继承 `mineworker.network.proxy_pool.base.ProxyPool`，实现 `get_proxy()`，
-然后 `PROXY_POOL = "myproj.MyProxyPool"`。
+然后 `PROXY_POOL = "myproj.MyProxyPool"`。另外三个是**可选**钩子，不实现也不会出错：
+
+| 钩子 | 什么时候被调 |
+|---|---|
+| `report_bad(proxy)` | **确定是代理的错**：连不上代理、CONNECT 被拒 |
+| `report_suspect(proxy)` | 说不清是谁的错：读超时、连接重置、响应畸形 |
+| `report_good(proxy)` | 这个代理刚成功完成一次请求（**每个成功请求都调**，实现要便宜） |
+
+## 不是所有失败都算代理的错
+
+下载器原先把任何下载异常都当成代理故障。后果实测过：三个**完全健康**的代理
+（各自都成功连上并转发了请求）配一个 5 秒才回的目标站、1 秒超时 ——
+**三个请求就把整池清空**，之后每个请求都要等满 `PROXY_WAIT_TIMEOUT`（默认 30 秒）
+才失败。一个慢 URL 让整个爬虫停摆一分钟。
+
+现在按阶段分流：
+
+- **连接阶段失败**（`ConnectError` / `ConnectTimeout` / `ProxyError`，curl 的
+  `CURLE_COULDNT_CONNECT` / `COULDNT_RESOLVE_PROXY` / `PROXY`）—— 配了代理时
+  TCP 的对端就是代理本身，连不上只可能是它的问题：**立刻拉黑**，行为不变。
+- **连上之后的失败**（读超时、连接重置、响应畸形）—— 说不清是谁的错，多半是
+  目标站：记一次「可疑」，连续攒够 `PROXY_SUSPECT_BAN_AFTER`（默认 3）次才拉黑。
+  **中间成功一次就清零** —— 真挂掉的代理会连续失败，照样被拉黑，只是晚几次。
+
+!!! note "顺带修正了一句假话"
+    退避日志里那句「第 N 次**连续**失败」此前是假的：代理池从来不知道
+    「成功」这回事，`_fails` 只在距上次失败超过 `PROXY_BAN_MAX_SECONDS`（900 秒）
+    时才清零。也就是说一个跑了一万次成功、15 分钟内偶尔失败三次的代理
+    会被退避到 4 倍冷却。加上 `report_good` 之后，那句话才名副其实。
+
+    **升级前写的自定义代理池不受影响**：三个新钩子都是可选的，没实现就跳过 ——
+    对 `report_suspect` 而言「跳过」正好等于「目标站的锅不算代理头上」。
 
 单个请求也可指定：`mw.Request(url, proxy="http://user:pass@host:port")`。

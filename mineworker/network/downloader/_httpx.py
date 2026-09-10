@@ -17,7 +17,8 @@ from mineworker.network.downloader._common import (
     pick_proxy,
     pool_limits,
     read_capped,
-    report_bad_proxy,
+    report_good_proxy,
+    report_proxy_failure,
     send_kwargs,
     shard_count,
     shard_index,
@@ -171,11 +172,14 @@ class HttpxDownloader(Downloader):
                 )
         except httpx.HTTPError as exc:
             if proxy:
-                report_bad_proxy(proxy)
+                # 按谁的错分流：连不上代理才立刻拉黑，读超时之类的先只记一次可疑
+                report_proxy_failure(proxy, exc)
             raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
         finally:
             if should_close:
                 client.close()
+        if proxy:
+            report_good_proxy(proxy)  # 成功一次就把连续失败计数清零
         return Response.from_httpx(resp, request, content=content)
 
     def close(self) -> None:
