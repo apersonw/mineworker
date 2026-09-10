@@ -39,13 +39,49 @@ class ApiProxyPool(ProxyPool):
         self._banned: dict[str, float] = {}
         # 代理 -> (连续失败次数, 上次失败时刻)，用来做指数退避
         self._fails: dict[str, tuple[int, float]] = {}
-        #: 「说不清是谁的错」的连续次数，攒够 PROXY_SUSPECT_BAN_AFTER 才拉黑
-        self._suspects: dict[str, int] = {}
+        #: 代理 -> (连续可疑失败次数, 上次时刻)，攒够 PROXY_SUSPECT_BAN_AFTER 才拉黑。
+        #: 带时间戳是为了能按年龄回收 —— 见 `_prune`
+        self._suspects: dict[str, tuple[int, float]] = {}
         # None = 从没抓过。不能用 0.0 当哨兵：monotonic 的原点是开机，刚启动的容器上
         # monotonic() - 0.0 < PROXY_MIN_INTERVAL 会把第一次抓取跳过，代理池起不来。
         self._last_fetch: float | None = None
 
     # ------------------------------------------------------------------
+    def _prune(self, now: float) -> None:
+        """回收已经没有意义的记账。**调用方必须持有 `self._lock`。**
+
+        这四个 dict 都以代理为键，而代理是会轮换的 —— 很多代理商的提取接口
+        每次返回**全新的 IP**。实测 3000 次 `get_proxy` 之后 `_use_count` 里
+        躺着 1500 条，且只增不减。
+
+        只做**语义等价**的回收，不顺手改行为：
+
+        - `_banned` 里已过期的：`_is_banned` 本来也会在下次被查到时删掉，
+          只是「下次」对一个再也不会出现的代理永远不来；
+        - `_fails` / `_suspects` 里过了 `PROXY_BAN_MAX_SECONDS` 的：现有逻辑
+          本来就把它们当作已归零（退避重新从头算），删掉不改变任何判断；
+        - `_use_count` 里**既不在池中、也不在冷却中**的：这类代理已经退出流通，
+          它的使用次数没有意义。**这一条同时修好了轮换**：代理用满
+          `PROXY_MAX_USE_TIMES` 被 `_drop` 之后，`_fetch` 会把它放回池里，
+          而计数不清零 —— 于是它只能再用一次就又被丢。实测 3 个代理的池在
+          第一轮用完之后，稳态退化成**每秒只取到 3 个**（其余空手而归），
+          而且每秒去拉一次供应商的列表接口，永远不停。
+          文档写的是「用满这么多次后**轮换**」，不是终身配额。
+        """
+        for key, until in list(self._banned.items()):
+            if until <= now:
+                del self._banned[key]
+        for key, (_, last) in list(self._fails.items()):
+            if now - last > setting.PROXY_BAN_MAX_SECONDS:
+                del self._fails[key]
+        for key, (_, last) in list(self._suspects.items()):
+            if now - last > setting.PROXY_BAN_MAX_SECONDS:
+                del self._suspects[key]
+        live = set(self._pool) | set(self._banned)
+        for key in list(self._use_count):
+            if key not in live:
+                del self._use_count[key]
+
     def _fetch(self) -> None:
         if not self._api:
             return
@@ -53,6 +89,9 @@ class ApiProxyPool(ProxyPool):
         if self._last_fetch is not None and now - self._last_fetch < setting.PROXY_MIN_INTERVAL:
             return
         self._last_fetch = now
+        # 先回收再补充：用满次数被丢出池的代理，计数在这里清零，
+        # 补回来之后才是「轮换」而不是「只能再用一次」
+        self._prune(now)
         try:
             body = httpx.get(self._api, timeout=10).text.strip()
         except httpx.HTTPError as exc:
@@ -144,9 +183,14 @@ class ApiProxyPool(ProxyPool):
         threshold = max(setting.PROXY_SUSPECT_BAN_AFTER, 1)
         raw = proxy.split("://", 1)[-1]
         with self._lock:
-            n = self._suspects.get(raw, 0) + 1
+            now = time.monotonic()
+            prev, last = self._suspects.get(raw, (0, 0.0))
+            # 和 `_fails` 一个规矩：隔得太久就不算「连续」了
+            if last and now - last > setting.PROXY_BAN_MAX_SECONDS:
+                prev = 0
+            n = prev + 1
             if n < threshold:
-                self._suspects[raw] = n
+                self._suspects[raw] = (n, now)
                 log.debug("代理 {} 第 {}/{} 次可疑失败（还不拉黑）", proxy, n, threshold)
                 return
             self._suspects.pop(raw, None)
