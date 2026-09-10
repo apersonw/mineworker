@@ -41,6 +41,40 @@ _ssl_cache: dict[Any, ssl.SSLContext] = {}
 _ssl_lock = threading.Lock()
 
 
+# 实际跑着几个工作线程。**不能直接读 `setting.SPIDER_THREAD_COUNT`** ——
+# 每个 Spider 都接受 `thread_count=N` 覆盖它，而下面三个函数
+# （`pool_limits` / `shard_count` / `loop_count`）都要按**真实**并发算。
+# 两者不联动时，`AirSpider(thread_count=64)` 配默认 `SPIDER_THREAD_COUNT=4`
+# 会算出 1 片 1 个循环，v4.34/v4.35 的分片修复**静默不生效**：
+# 实测同样 64 线程，同步 546→899、异步 198→775。
+_effective_concurrency: int | None = None
+
+
+def set_effective_concurrency(n: int | None) -> None:
+    """由调度器在启动时告知真实工作线程数；``None`` 表示回到读配置。
+
+    ⚠️ **必须在任何下载器被创建之前调用**：`AsyncHttpxDownloader` 在
+    ``__init__`` 里就把事件循环建好了，之后再改这个值不会重新分片。
+    调用点在 `BaseScheduler.__init__`，早于第一次下载。
+
+    一个进程里跑多个爬虫时**取最大值** —— 全局下载器是它们共用的，
+    真实并发是各家之和，宁可多分片（多占几个连接池）也不要少分
+    （少分是掉到上面那条负收益曲线上）。
+    """
+    global _effective_concurrency
+    if n is None:
+        _effective_concurrency = None
+        return
+    n = max(int(n), 1)
+    _effective_concurrency = n if _effective_concurrency is None else max(_effective_concurrency, n)
+
+
+def effective_concurrency() -> int:
+    """真实并发：调度器告知过就用它，否则退回配置值。"""
+    n = _effective_concurrency
+    return max(n if n is not None else setting.SPIDER_THREAD_COUNT, 1)
+
+
 def ssl_context_for(verify: Any) -> Any:
     """把 ``verify`` 值换成可复用的 ``SSLContext``；不可缓存的原样返回。"""
     # False（不校验）和已经是 SSLContext 的，都没有构造开销
@@ -83,7 +117,7 @@ def pool_limits(concurrency: int | None = None) -> httpx.Limits:
     两个值都只增不减 —— 低于 httpx 默认值的配置一律按默认值走，
     免得给小并发的部署带来意外的收紧。
     """
-    n = max(concurrency if concurrency is not None else setting.SPIDER_THREAD_COUNT, 1)
+    n = max(concurrency if concurrency is not None else effective_concurrency(), 1)
     return httpx.Limits(max_connections=max(n, 100), max_keepalive_connections=max(n, 20))
 
 
@@ -114,7 +148,7 @@ def shard_count(concurrency: int | None = None, per_shard: int | None = None) ->
     per_shard = setting.SESSION_SHARD_THREADS if per_shard is None else per_shard
     if per_shard <= 0:
         return 1
-    n = max(concurrency if concurrency is not None else setting.SPIDER_THREAD_COUNT, 1)
+    n = max(concurrency if concurrency is not None else effective_concurrency(), 1)
     return max(1, -(-n // per_shard))
 
 
