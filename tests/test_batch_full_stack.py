@@ -89,7 +89,7 @@ def _common_setting(mysql_url: str, redis_url: str) -> None:
     setting.DONE_CHECK_TIMES = 3
     setting.SPIDER_THREAD_COUNT = 2
     setting.ROBOTS_OBEY = False
-    setting.CIRCUIT_FAILURE_THRESHOLD = 0
+    # 熔断保持开着（默认阈值 10）—— 见 test_full_stack_integration 的说明
     setting.SPIDER_MAX_RETRY_TIMES = 1
     setting.DEDUP_FILTER = "redis"  # 多进程共享，见 test_distributed_full_stack
     from urllib.parse import urlparse
