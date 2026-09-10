@@ -39,6 +39,8 @@ class ApiProxyPool(ProxyPool):
         self._banned: dict[str, float] = {}
         # 代理 -> (连续失败次数, 上次失败时刻)，用来做指数退避
         self._fails: dict[str, tuple[int, float]] = {}
+        #: 「说不清是谁的错」的连续次数，攒够 PROXY_SUSPECT_BAN_AFTER 才拉黑
+        self._suspects: dict[str, int] = {}
         # None = 从没抓过。不能用 0.0 当哨兵：monotonic 的原点是开机，刚启动的容器上
         # monotonic() - 0.0 < PROXY_MIN_INTERVAL 会把第一次抓取跳过，代理池起不来。
         self._last_fetch: float | None = None
@@ -113,6 +115,44 @@ class ApiProxyPool(ProxyPool):
         log.debug("代理 {} 冷却结束，重新可用", proxy)
         return False
 
+    def report_good(self, proxy: str) -> None:
+        """成功一次 —— 连续失败计数清零。
+
+        每个成功请求都会调用它，所以先做两次 dict 成员检查（GIL 下是原子的），
+        绝大多数时候直接返回，不去碰池的全局锁 —— 那把锁在 `get_proxy` 的
+        热路径上。最坏情况是漏掉一次清零，下一次成功会补上。
+
+        ⚠️ **别把这条当成性能优化**：实测两种写法都在 ~3M 次/秒（每次约 0.3µs），
+        而 httpx 这条路径每请求约 1.9ms —— 占比 0.016%，怎么写都无所谓。
+        留着快路径只为不和 `get_proxy` 抢同一把锁，而**这一点没有单独量过**。
+        """
+        raw = proxy.split("://", 1)[-1]
+        if raw not in self._fails and raw not in self._suspects:
+            return
+        with self._lock:
+            self._fails.pop(raw, None)
+            self._suspects.pop(raw, None)
+
+    def report_suspect(self, proxy: str) -> None:
+        """一次说不清是谁的错的失败：读超时、连接重置、响应畸形。
+
+        这类失败**大多是目标站的锅**，直接拉黑会把整池健康代理清空
+        （实测三个请求打一个慢 URL 就够了）。所以要连续攒够
+        `PROXY_SUSPECT_BAN_AFTER` 次 —— 中间成功一次就由 `report_good` 清零。
+        真正挂掉的代理会连续失败，照样会被拉黑，只是晚几次。
+        """
+        threshold = max(setting.PROXY_SUSPECT_BAN_AFTER, 1)
+        raw = proxy.split("://", 1)[-1]
+        with self._lock:
+            n = self._suspects.get(raw, 0) + 1
+            if n < threshold:
+                self._suspects[raw] = n
+                log.debug("代理 {} 第 {}/{} 次可疑失败（还不拉黑）", proxy, n, threshold)
+                return
+            self._suspects.pop(raw, None)
+        log.warning("代理 {} 连续 {} 次可疑失败，按代理故障处理", proxy, threshold)
+        self.report_bad(proxy)
+
     def report_bad(self, proxy: str) -> None:
         with self._lock:
             now = time.monotonic()
@@ -124,6 +164,7 @@ class ApiProxyPool(ProxyPool):
                 fails = 0
             fails += 1
             self._fails[raw] = (fails, now)
+            self._suspects.pop(raw, None)
             seconds = self._ban_seconds(fails)
             # 两种写法都记：拉列表拿到的是裸 host:port，调用方报上来的带 scheme
             for key in (raw, proxy):

@@ -296,11 +296,70 @@ async def apick_proxy(request: Request, fallback: str | None = None) -> str | No
         await asyncio.sleep(_proxy_gap())
 
 
+#: curl 那边「确实是代理的错」的错误码：连不上、解析不了代理主机名、代理协议出错
+_CURL_PROXY_CODES = frozenset({5, 7, 97})
+
+
+def is_proxy_fault(exc: BaseException) -> bool:
+    """这次失败能不能算在代理头上。
+
+    **只有连接阶段的失败才算。** 配了代理时，TCP 连接的对端就是代理本身，
+    连不上、CONNECT 被拒，都只可能是代理的问题。
+
+    一旦连上了，后面的失败（读超时、连接重置、响应畸形）就说不清是谁的错 ——
+    可能是代理挂了，更可能是目标站慢或坏。原先一律算代理的错，于是**三个请求
+    打一个慢 URL 就能把整池健康代理清空**：实测三个代理各自都成功转发了请求，
+    仍然全被冷却 60 秒，之后每个请求都要等满 `PROXY_WAIT_TIMEOUT` 才失败。
+    """
+    if isinstance(exc, httpx.ProxyError | httpx.ConnectError | httpx.ConnectTimeout):
+        return True
+    # curl_cffi 的 RequestsError 带 CURLE_* 码。不在这里 import curl_cffi ——
+    # 它是可选依赖，而这个模块被所有下载器共用
+    return getattr(exc, "code", None) in _CURL_PROXY_CODES
+
+
 def report_bad_proxy(proxy: str) -> None:
-    """下载失败时把代理反馈给代理池（池未启用则无操作）。"""
+    """确定是代理自己的错 —— 立刻拉黑（池未启用则无操作）。"""
     pool = get_proxy_pool()
     if pool is not None:
         pool.report_bad(proxy)
+
+
+def _optional_hook(pool: object, name: str) -> Callable[[str], None] | None:
+    """取代理池上的可选钩子；没有就返回 None。
+
+    ⚠️ **不能直接调**：文档让自定义池继承 `ProxyPool`，但 `PROXY_POOL` 是
+    `load_object` 加载的，没有任何地方强制这件事 —— 本仓库自己的
+    `benchmarks/proxylab.StaticPool` 就是纯鸭子类型。直接调新钩子会让
+    所有升级前写的自定义池当场 `AttributeError`（全栈用例正是这么红的）。
+    """
+    hook = getattr(pool, name, None)
+    return hook if callable(hook) else None
+
+
+def report_proxy_failure(proxy: str, exc: BaseException) -> None:
+    """下载失败时把代理反馈给代理池，**按谁的错分流**。"""
+    pool = get_proxy_pool()
+    if pool is None:
+        return
+    if is_proxy_fault(exc):
+        pool.report_bad(proxy)
+        return
+    # 没实现 `report_suspect` 的老自定义池：什么都不做。
+    # 这正是安全的方向 —— 目标站的锅本来就不该记在代理头上。
+    hook = _optional_hook(pool, "report_suspect")
+    if hook is not None:
+        hook(proxy)
+
+
+def report_good_proxy(proxy: str) -> None:
+    """这个代理刚成功完成一次请求 —— 把连续失败计数清零。"""
+    pool = get_proxy_pool()
+    if pool is None:
+        return
+    hook = _optional_hook(pool, "report_good")
+    if hook is not None:
+        hook(proxy)
 
 
 def resolve_impersonate(request: Request) -> str | None:

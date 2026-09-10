@@ -27,7 +27,8 @@ from mineworker.network.downloader._common import (
     effective_concurrency,
     pool_limits,
     read_capped,
-    report_bad_proxy,
+    report_good_proxy,
+    report_proxy_failure,
     send_kwargs,
     shard_index,
     ssl_context_for,
@@ -204,8 +205,10 @@ class AsyncHttpxDownloader(Downloader):
                     resp, content = await _stream(shard.client, request, kwargs)
             except httpx.HTTPError as exc:
                 if proxy is not None:
-                    report_bad_proxy(proxy)
+                    report_proxy_failure(proxy, exc)
                 raise RequestError(f"下载失败 {request.method} {request.url}：{exc!r}") from exc
+        if proxy is not None:
+            report_good_proxy(proxy)
         return Response.from_httpx(resp, request, content=content)
 
     # ------------------------------------------------------------------
