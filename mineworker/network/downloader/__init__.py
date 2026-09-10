@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING
 
 from mineworker import setting
 from mineworker.network import cache, throttle
-from mineworker.network.downloader._common import resolve_impersonate
+from mineworker.network.downloader._common import (
+    resolve_impersonate,
+    set_effective_concurrency,
+)
 from mineworker.network.downloader._httpx import HttpxDownloader
 from mineworker.network.downloader.base import Downloader
 
@@ -104,3 +107,6 @@ def close_default_downloaders() -> None:
     for downloader in _defaults.values():
         downloader.close()
     _defaults.clear()
+    # 连「真实并发是多少」一起收掉。它是累积取最大的，不重置就会跨爬虫
+    # （以及跨用例）泄漏，让下一个爬虫按上一个的线程数分片。
+    set_effective_concurrency(None)

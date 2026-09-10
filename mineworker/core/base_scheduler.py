@@ -21,6 +21,7 @@ from mineworker.core.collector import Collector
 from mineworker.core.parser_control import ParserWorker
 from mineworker.exceptions import SpiderError
 from mineworker.network.downloader import close_default_downloaders
+from mineworker.network.downloader._common import set_effective_concurrency
 from mineworker.network.middleware import MiddlewareManager
 from mineworker.network.proxy_pool import close_proxy_pool
 from mineworker.network.request import Request
@@ -50,6 +51,12 @@ class BaseScheduler:
     ) -> None:
         self._parser = parser
         self._thread_count = 1 if setting.DEBUG else (thread_count or setting.SPIDER_THREAD_COUNT)
+        # 把**真实**线程数告诉下载器层。`thread_count=` 会覆盖配置，而
+        # `pool_limits` / `shard_count` / `loop_count` 都要按真实并发算 ——
+        # 不告诉它们，`AirSpider(thread_count=64)` 配默认 `SPIDER_THREAD_COUNT=4`
+        # 就会算出 1 片 1 个循环，分片修复静默失效（实测同步 546→899、异步 198→775）。
+        # 必须在这里、而不是 `_on_start`：`AsyncHttpxDownloader.__init__` 建循环时就要读它。
+        set_effective_concurrency(self._thread_count)
         self.stats = Stats()
         self._task_queue = self._make_task_queue()
         self._request_buffer = RequestBuffer(self._task_queue, self.stats, dedup=self._make_dedup())

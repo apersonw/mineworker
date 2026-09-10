@@ -24,6 +24,7 @@ from mineworker.network.downloader._common import (
     ProxyClientCache,
     apick_proxy,
     check_content_type,
+    effective_concurrency,
     pool_limits,
     read_capped,
     report_bad_proxy,
@@ -81,7 +82,7 @@ def loop_count(threads: int | None = None) -> int:
     per_loop = setting.ASYNC_THREADS_PER_LOOP
     if per_loop <= 0:
         return 1
-    n = max(threads if threads is not None else setting.SPIDER_THREAD_COUNT, 1)
+    n = max(threads if threads is not None else effective_concurrency(), 1)
     return max(1, -(-n // per_loop))
 
 

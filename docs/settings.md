@@ -16,7 +16,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `SPIDER_THREAD_COUNT` | `4` | 工作线程数 |
+| `SPIDER_THREAD_COUNT` | `4` | 工作线程数。`Spider(thread_count=N)` 会覆盖它，**分片与连接池上限跟着真实值走**，见下 |
 | `SPIDER_MAX_RETRY_TIMES` | `3` | 单请求最大重试次数 |
 | `SESSION_CACHE_SIZE` | `16` | 开 `USE_SESSION` 且用代理池时，最多缓存多少个代理的连接池（分片后上限按片数自动放大） |
 | `SESSION_SHARD_THREADS` | `32` | 每个代理连接池最多服务多少线程，超出再开一片；`0` = 不分片。见下方说明 |
@@ -205,6 +205,31 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 
 只影响同步 httpx 下载器。异步下载器跑在单个事件循环里、不存在这种线程争用；
 `curl_cffi` 用 libcurl 自己的连接池，机制不同，均未改动。
+
+### `thread_count=` 会覆盖 `SPIDER_THREAD_COUNT`，分片跟着真实值走
+
+每个 Spider 都接受 `thread_count=N`：
+
+```python
+MySpider(thread_count=64).start()      # 64 个工作线程，配置里写的 4 不算数
+```
+
+`SESSION_SHARD_THREADS` / `ASYNC_THREADS_PER_LOOP` / 连接池上限**都按这个真实值算**，
+不是按配置里的数 —— 调度器启动时会把真实线程数告诉下载器层。
+
+!!! warning "v4.46 之前不是这样，那是个静默失效"
+    此前这三个函数直接读 `setting.SPIDER_THREAD_COUNT`，于是
+    `AirSpider(thread_count=64)` 配默认的 `4` 会算出 **1 片、1 个事件循环** ——
+    分片一直没生效，而日志、行为、返回值全都正常。代价（同样 64 个真实线程、
+    50ms 靶子）：
+
+    | | 分片 | 循环 | httpx 同步 | httpx 异步 |
+    |---|---:|---:|---:|---:|
+    | 按配置的 4 算（旧） | 1 | 1 | 546 | **198** |
+    | 按真实的 64 算（新） | 2 | 4 | **899** | **775** |
+
+一个进程里跑多个爬虫时**取最大值** —— 全局下载器是它们共用的，真实并发是各家之和；
+爬虫收尾时这个值会跟着下载器一起重置。
 
 ## 每进程的开销天花板
 
