@@ -101,14 +101,18 @@ class CurlDownloader(Downloader):
             return self._session_for_proxy(proxy), False, proxy
         return self._make_session(proxy, verify, cookies), True, proxy
 
-    def _jar_for(self, proxy: str | None) -> CookieJar:
+    def _jar_for(self, proxy: str | None, capacity: int) -> CookieJar:
         """这个代理的 cookie jar —— **所有分片共用同一个**。
 
         curl_cffi 和 httpx 一样，收到裸 `CookieJar` 时按引用使用
         （`Cookies.__init__` 的 else 分支），而 `CookieJar` 自带 `_cookies_lock`。
         所以分片不改变 cookie 语义。
+
+        ⚠️ **jar 的寿命必须盖过 session 的**：容量要和 session 缓存一样大
+        （第一版只有它的 1/片数，代理一多 jar 先被换出，同代理的两个分片就分家了），
+        且每次取 session 都要摸一下 jar，不能只在新建时摸。
         """
-        jar, _ = self._jars.get_or_create(proxy, CookieJar)
+        jar, _ = self._jars.get_or_create(proxy, CookieJar, capacity=capacity)
         return jar  # type: ignore[no-any-return]
 
     def _session_for_proxy(self, proxy: str | None) -> CurlSession:
@@ -124,10 +128,13 @@ class CurlDownloader(Downloader):
         """
         shards = shard_count(per_shard=setting.CURL_SESSION_SHARD_THREADS)
         key = proxy if shards <= 1 else f"{proxy}#{shard_index(shards)}"
+        capacity = max(setting.SESSION_CACHE_SIZE, 1) * shards
+        # **每次都摸一下 jar**，不只在新建 session 时 —— 见 `_jar_for` 的说明
+        jar = self._jar_for(proxy, capacity)
         session, evicted_list = self._sessions.get_or_create(
             key,
-            lambda: self._make_session(proxy, self._verify, cookies=self._jar_for(proxy)),
-            capacity=max(setting.SESSION_CACHE_SIZE, 1) * shards,
+            lambda: self._make_session(proxy, self._verify, cookies=jar),
+            capacity=capacity,
         )
         for evicted in evicted_list:
             with contextlib.suppress(Exception):

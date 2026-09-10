@@ -160,3 +160,87 @@ def test_shard_index_is_stable_within_a_thread() -> None:
     """同一个线程每次都该落在同一片上，否则连接复用无从谈起。"""
     got = {shard_index(4) for _ in range(10)}
     assert len(got) == 1
+
+
+def test_jar_outlives_its_clients_when_many_proxies_rotate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**凡是还有活 client 的代理，它的 jar 必须还在缓存里。**
+
+    补的是一个真 bug：第一版 jar 缓存用的是默认的 `SESSION_CACHE_SIZE`，
+    而 client 缓存是它的**片数倍** —— 代理一多，jar 先被换出、client 还活着，
+    之后为同一代理新建分片就会拿到一个全新的 jar，两个分片的 cookie 从此分家。
+    上面那些用例没抓到它，是因为它们只用了一两个代理，jar 缓存从没换出过。
+
+    ⚠️ 这条断言的是**不变式**，不是「两次调用落在不同分片上」。
+    第一版就是那么写的，结果**在修好的代码上也是红的** ——
+    分片序号是每线程自增再取模，5 个线程在 2 片上是 0,1,0,1,0，
+    第一次和最后一次必然同片。判据一旦依赖线程落点，就是在赌调度。
+    """
+    monkeypatch.setattr(setting, "SESSION_SHARD_THREADS", 1)
+    monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 3)  # → 3 片
+    monkeypatch.setattr(setting, "SESSION_CACHE_SIZE", 2)  # client 容量 6
+    downloader = HttpxDownloader(use_session=True)
+
+    def touch(proxy: str) -> None:
+        downloader._session_client(proxy)
+
+    try:
+        # **每个代理只碰一次**：这样 client 缓存的每个槽位对应一个不同的代理，
+        # 活代理数 = client 容量（6）> 被削小的 jar 容量。
+        # 第一版让每个代理碰三次，结果 6 个槽位被最后两个代理的三个分片占满 ——
+        # 活代理只有 2 个，恰好等于 jar 容量，变异照样不红。
+        for i in range(8):
+            t = threading.Thread(target=touch, args=(f"http://p{i}",))
+            t.start()
+            t.join(timeout=10)
+
+        live_clients = downloader._clients._items
+        live_jars = downloader._jars._items
+        assert live_clients, "一个 client 都没缓存，这条用例没验到东西"
+
+        for key in live_clients:
+            proxy = str(key).split("#", 1)[0]
+            assert proxy in live_jars, (
+                f"{proxy} 还有活着的 client，它的 jar 却已被换出 —— "
+                "下次为它新建分片会拿到一个全新的 jar，登录态在分片之间丢失"
+            )
+    finally:
+        downloader.close()
+
+
+def test_hot_client_keeps_its_jar_alive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """**一个很热但从不重建的 client，它的 jar 不能因为「冷」被换出。**
+
+    两个缓存的 LRU 位置更新时机不同：client 每次命中都会被挪到队尾，
+    而 jar 如果只在**新建 client 时**才摸一下，就会一直停在队首 ——
+    别的代理不断进来，它先被挤掉，而它的 client 还热着。
+
+    这条和上一条各钉一个条件：上一条钉「容量要一样大」，这条钉「每次都要摸」。
+    合成一条的话，任一变异都可能被另一条件掩盖。
+    """
+    monkeypatch.setattr(setting, "SESSION_SHARD_THREADS", 1)
+    monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 3)  # → 3 片
+    monkeypatch.setattr(setting, "SESSION_CACHE_SIZE", 2)  # 两个缓存都是 6
+    downloader = HttpxDownloader(use_session=True)
+    hot = "http://hot"
+
+    def touch(proxy: str) -> None:
+        downloader._session_client(proxy)
+
+    try:
+        touch(hot)
+        # 交替：不断刷新 hot 的 client，同时让新代理挤进来
+        for i in range(8):
+            touch(hot)
+            touch(f"http://cold{i}")
+
+        assert any(str(k).startswith(hot) for k in downloader._clients._items), (
+            "hot 的 client 自己就被换出了，这条用例没验到东西"
+        )
+        assert hot in downloader._jars._items, (
+            "hot 的 client 还热着，它的 jar 却被换出了 —— "
+            "jar 的 LRU 位置没跟着使用走，下次重建分片就会拿到新 jar"
+        )
+    finally:
+        downloader.close()
