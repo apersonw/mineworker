@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -19,6 +20,7 @@ import pytest
 import mineworker as mw
 from integration_site import Site
 from mineworker import setting
+from mineworker.network import circuit, throttle
 from mineworker.network.downloader import close_default_downloaders
 
 N_ITEMS = 8
@@ -60,7 +62,11 @@ def _configure(**over: Any) -> None:
     setting.DOWNLOAD_DELAY = 0.0
     setting.SPIDER_MAX_RETRY_TIMES = 2
     setting.RETRY_BACKOFF = 0.01
-    setting.CIRCUIT_FAILURE_THRESHOLD = 0  # 关熔断：否则 /boom/500 会被当成整站挂了
+    # 熔断保持**开着**（默认阈值 10）。v4.37 这里原来写的是
+    # 「关熔断：否则 /boom/500 会被当成整站挂了」——**那句话是错的**：
+    # /boom/500 只失败 1+SPIDER_MAX_RETRY_TIMES 次，离阈值 10 还远。
+    # 实测开与关结果完全一致（8/8 item 页、10 条正文、/boom/500 命中 3 次）。
+    # 开着还多一层覆盖：谁把熔断改得过于敏感，这些用例会红。
     setting.ITEM_PIPELINES = []
     setting.DONE_CHECK_INTERVAL = 0.05
     setting.DONE_CHECK_TIMES = 3
@@ -186,3 +192,81 @@ def test_items_land_in_a_real_database(postgres_db: Any) -> None:
     assert len(rows) == N_ITEMS + 2, f"库里只有 {len(rows)} 行：{rows}"
     titles = {r["title"] for r in rows}
     assert "gz" in titles and "ok429" in titles
+
+
+def test_circuit_breaker_delays_but_never_drops() -> None:
+    """熔断已经跳闸的域，正常页面**一个都不能少** —— 冷却是延迟，不是丢弃。
+
+    熔断的代价本来就是静默的：跳闸后整域冷却 `CIRCUIT_COOLDOWN`，所有线程一起避让，
+    表现为「变慢」。但**慢和丢是两回事**，这条钉的是后者。
+
+    ⚠️ **不靠爬取去触发跳闸**。第一版让 12 个坏 URL 和正常页面一起爬，
+    指望攒够 10 次连续失败 —— 那条用例**单独跑绿、和别的用例一起跑红**：
+    熔断数的是「连续」失败而 `record_success` 会清零，并发交错时中间只要有一次成功
+    就归零，够不够阈值全看调度。**不能交一个看运气的用例。**
+    现在直接把熔断打跳，再爬 —— 要验的是「跳闸之后会不会丢页面」，
+    触发过程本身不是这条的主题（那条在 `test_circuit.py`）。
+    """
+    cooldown = 3.0
+    _configure(CIRCUIT_FAILURE_THRESHOLD=10, CIRCUIT_COOLDOWN=cooldown, ROBOTS_OBEY=False)
+    circuit.reset()
+    throttle.reset()
+    with Site(n_items=N_ITEMS) as site:
+        # 确定性地打跳：阈值次失败，中间不掺任何成功
+        tripped = any(circuit.record_failure(site.url) for _ in range(10))
+        assert tripped, "没打跳 —— 这条用例后面的断言就没验到东西"
+
+        spider = _Spider(site.url)
+        started = time.monotonic()
+        spider.start()
+        wall = time.monotonic() - started
+        hits = dict(site.hits)
+
+    # 「不丢」
+    for i in range(N_ITEMS):
+        assert hits.get(f"/item/{i}") == 1, (
+            f"熔断跳闸后 /item/{i} 没抓到 —— 冷却只该延迟，不该丢页面：{hits}"
+        )
+    assert "gz" in spider.seen
+
+    # 「真的延迟了」—— 少了这半，把 penalize 整个删掉用例照样绿（实测过），
+    # 而那正是「熔断看起来还在、对目标站的保护没了」这种静默失效
+    assert wall >= cooldown * 0.6, (
+        f"跳闸后整轮只花了 {wall:.1f}s（冷却配的是 {cooldown}s）—— 冷却没有生效"
+    )
+
+
+def test_circuit_breaker_stays_quiet_on_a_normal_crawl() -> None:
+    """站点上有几条坏路径时，熔断不能把整个域拖下水。
+
+    熔断跳闸的代价是**静默的**：该域冷却 `CIRCUIT_COOLDOWN`（默认 60s），
+    所有线程一起避让 —— 表现为「变慢了」，不是报错。
+
+    靶场里有 `/boom/404`、`/boom/500`、`/boom/429` 三条坏路径，
+    其中 500 会重试到耗尽。开着默认阈值（10）跑完，正常页面必须一个不少。
+
+    ⚠️ v4.37 建这组用例时我把熔断关掉了，注释写的是「否则 /boom/500 会被当成
+    整站挂了」——**那是没验证过的假设**：500 只失败 1+重试次数 次，离 10 还远。
+    实测开与关结果完全一致。关着等于白白少一层覆盖。
+
+    ⚠️ **坏路径必须先跑**。第一版直接爬首页，而首页里 item 链接排在 `/boom/*`
+    前面 —— 等 500 失败时正常页面早抓完了，把阈值降到 2 用例照样绿。
+    现在先单独打一遍坏路径，再爬首页。
+    """
+    _configure(CIRCUIT_FAILURE_THRESHOLD=10)
+
+    class BadFirst(_Spider):
+        def start_requests(self) -> Any:
+            # 先把坏路径打满 —— 阈值过低的话，这里就该跳闸并殃及整个域
+            for _ in range(4):
+                yield mw.Request(self.base + "/boom/500", callback=self.item, use_session=True)
+            yield mw.Request(self.base + "/", callback=self.index, use_session=True)
+
+    with Site(n_items=N_ITEMS) as site:
+        spider = BadFirst(site.url)
+        spider.start()
+        hits = dict(site.hits)
+
+    for i in range(N_ITEMS):
+        assert hits.get(f"/item/{i}") == 1, f"/item/{i} 没抓到 —— 熔断把正常页面一起拦下了：{hits}"
+    assert "gz" in spider.seen and "ok429" in spider.seen

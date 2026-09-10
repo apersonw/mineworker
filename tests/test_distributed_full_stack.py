@@ -72,7 +72,7 @@ def _node(base: str, redis_url: str, pg_url: str, seed: bool) -> None:
     setting.ROBOTS_OBEY = True
     setting.SPIDER_MAX_RETRY_TIMES = 2
     setting.RETRY_BACKOFF = 0.01
-    setting.CIRCUIT_FAILURE_THRESHOLD = 0
+    # 熔断保持开着（默认阈值 10）—— 见 test_full_stack_integration 的说明
     setting.ITEM_FILTER_ENABLE = True
     # **分布式必须用共享后端**：默认的 memory 是进程内布隆，三个节点各一份。
     # docs/distributed.md 的示例里就是这么写的，框架现在也会在没设时告警。
