@@ -69,6 +69,10 @@ def _configure(threads: int) -> None:
     setting.CONCURRENT_REQUESTS_PER_DOMAIN = 0
     setting.ROBOTS_OBEY = False
     setting.RANDOM_USER_AGENT = False
+    # 基准工具**自己占用 stdout** 打表格；框架结束时那行 MINEWORKER_RUN_SUMMARY
+    # 是给编排层读容器日志用的，在这里只会混进表里（test_benchmarks_smoke 解析
+    # 的就是这段 stdout，0.22.0 发出去后 CI 四版齐红）—— 关掉
+    setting.RUN_SUMMARY_ENABLE = False
     from mineworker.utils import log
 
     log.configure()

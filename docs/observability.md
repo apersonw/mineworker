@@ -19,7 +19,8 @@ MINEWORKER_RUN_SUMMARY {"schema":1,"request_ok":63,"items":60,"run_id":"...","sp
   也不带 loguru 的时间戳 / 颜色——解析方按前缀 `MINEWORKER_RUN_SUMMARY ` 找到该行、
   取其后的一段当 JSON 即可。
 - 字段是**对外契约**：前缀、`schema`、各计数键名都保持稳定；字段增删时 `schema` +1。
-- 关掉：`RUN_SUMMARY_ENABLE = False`。
+- 关掉：`RUN_SUMMARY_ENABLE = False`。**在进程内嵌入爬虫、自己解析 stdout 的工具**
+  （基准脚本、测试 harness）应关掉——那一行会混进你自己的输出里。
 
 判「空转」：`request_ok == 0 and items == 0`（而进程 exit 0）。
 `run_id` / `namespace` 只在设了[运行作用域](distributed.md#运行作用域定时重跑)时非空，
