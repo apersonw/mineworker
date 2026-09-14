@@ -17,9 +17,9 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-from mineworker import Request, setting
-from mineworker.network import cache
-from mineworker.network.downloader import close_default_downloaders
+from netspy import Request, setting
+from netspy.network import cache
+from netspy.network.downloader import close_default_downloaders
 
 
 @pytest.fixture(autouse=True)

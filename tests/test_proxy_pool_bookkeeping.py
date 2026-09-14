@@ -18,8 +18,8 @@ import httpx
 import pytest
 import respx
 
-from mineworker import setting
-from mineworker.network.proxy_pool.api import ApiProxyPool
+from netspy import setting
+from netspy.network.proxy_pool.api import ApiProxyPool
 
 _LIST = "https://p/list"
 
@@ -27,7 +27,7 @@ _LIST = "https://p/list"
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     now = [1000.0]
-    monkeypatch.setattr("mineworker.network.proxy_pool.api.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("netspy.network.proxy_pool.api.time.monotonic", lambda: now[0])
     return now
 
 

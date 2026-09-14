@@ -5,7 +5,7 @@
 自动回收重跑。
 
 ```bash
-pip install "mineworker[redis,mysql]"
+pip install "netspy[redis,mysql]"
 ```
 
 ## 任务表
@@ -28,7 +28,7 @@ CREATE TABLE `crawl_task` (
 ## 写爬虫
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class CrawlTask(mw.BatchSpider):
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     以及不在请求处理过程中调用（比如 master 自己的逻辑）。
     写库失败被 dump 到 `failed_items.jsonl` 的那批**算落库**
     （与[请求销账](item-pipeline.md#落库之后才给任务销账)同一条规则），
-    任务照常标完成 —— 数据可用 `mineworker retry --items` 回放。
+    任务照常标完成 —— 数据可用 `netspy retry --items` 回放。
 
 ## 两种角色
 
@@ -101,13 +101,13 @@ master 每 `BATCH_MONITOR_INTERVAL` 秒：
 默认落 MySQL（`MysqlBatchStore`）。测试或小规模内存跑批可传 `batch_store=`：
 
 ```python
-from mineworker.core.batch_store import MemoryBatchStore
+from netspy.core.batch_store import MemoryBatchStore
 
 store = MemoryBatchStore([{"id": 1, "url": "..."}, {"id": 2, "url": "..."}])
 CrawlTask(batch_store=store).start_monitor(once=True)
 ```
 
-自定义后端继承 `mineworker.core.batch_store.BatchStore`。
+自定义后端继承 `netspy.core.batch_store.BatchStore`。
 
 ## 配置
 

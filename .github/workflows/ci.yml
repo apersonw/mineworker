@@ -39,8 +39,8 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: mineworker
-          POSTGRES_DB: mineworker
+          POSTGRES_PASSWORD: netspy
+          POSTGRES_DB: netspy
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres"
@@ -54,11 +54,11 @@ jobs:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: mineworker
-          MYSQL_DATABASE: mineworker
+          MYSQL_ROOT_PASSWORD: netspy
+          MYSQL_DATABASE: netspy
         ports: ["3306:3306"]
         options: >-
-          --health-cmd "mysqladmin ping -uroot -pmineworker --silent"
+          --health-cmd "mysqladmin ping -uroot -pnetspy --silent"
           --health-interval 5s --health-timeout 5s --health-retries 20
 
     steps:
@@ -74,9 +74,9 @@ jobs:
       - name: pytest
         # network 标记的用例要打外部指纹服务，放 CI 里会 flaky，本地手动跑
         env:
-          MINEWORKER_TEST_POSTGRES_URL: postgresql://postgres:mineworker@127.0.0.1:5432/mineworker
-          MINEWORKER_TEST_MYSQL_URL: mysql://root:mineworker@127.0.0.1:3306/mineworker
-          MINEWORKER_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          NETSPY_TEST_POSTGRES_URL: postgresql://postgres:netspy@127.0.0.1:5432/netspy
+          NETSPY_TEST_MYSQL_URL: mysql://root:netspy@127.0.0.1:3306/netspy
+          NETSPY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: pytest -ra -m "not network" --cov --cov-report=term-missing
 
   docs:
@@ -109,8 +109,8 @@ jobs:
           wheel=$(ls dist/*.whl)
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install "$wheel"
-          /tmp/smoke/bin/python -c "import mineworker; print(mineworker.__version__)"
+          /tmp/smoke/bin/python -c "import netspy; print(netspy.__version__)"
           # 只装核心包时 CLI 要给提示而不是 ModuleNotFoundError 堆栈
-          /tmp/smoke/bin/mineworker --version 2>&1 | grep -q 'mineworker\[cli\]'
+          /tmp/smoke/bin/netspy --version 2>&1 | grep -q 'netspy\[cli\]'
           /tmp/smoke/bin/pip install "${wheel}[cli]"
-          /tmp/smoke/bin/mineworker --version
+          /tmp/smoke/bin/netspy --version

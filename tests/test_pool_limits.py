@@ -19,10 +19,10 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader
-from mineworker.network.downloader._common import pool_limits
-from mineworker.network.downloader._httpx import HttpxDownloader
+from netspy import setting
+from netspy.network.downloader._async_httpx import AsyncHttpxDownloader
+from netspy.network.downloader._common import pool_limits
+from netspy.network.downloader._httpx import HttpxDownloader
 
 
 def _pool_of(client: httpx.Client | httpx.AsyncClient) -> tuple[int, int]:

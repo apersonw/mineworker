@@ -21,9 +21,9 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-from mineworker import setting
-from mineworker.utils import log as logmod
-from mineworker.utils.alert import (
+from netspy import setting
+from netspy.utils import log as logmod
+from netspy.utils.alert import (
     DingTalkNotifier,
     FeishuNotifier,
     WeChatWorkNotifier,
@@ -65,7 +65,7 @@ def test_dingtalk_sends_text(httpserver: HTTPServer) -> None:
     content = got[0]["json"]["text"]["content"]
     assert "卡死" in content and "10 分钟没有新请求" in content
     # 钉钉的「自定义关键词」安全模式要求消息里含关键词，固定带上省得用户踩坑
-    assert "MineWorker" in content
+    assert "Netspy" in content
 
 
 def test_dingtalk_signs_when_a_secret_is_given(httpserver: HTTPServer) -> None:

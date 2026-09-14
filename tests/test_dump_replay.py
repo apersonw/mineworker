@@ -4,7 +4,7 @@ v4.14 把「dump 到 failed_items 也算落到了持久介质，可以销账」�
 这一组验的是那条退路本身。
 
 实测（真 PG，默认 on_conflict="nothing"）：一条 UpdateItem 写库失败被 dump，
-`mineworker retry --items` 报告「成功 1，仍失败 0」并删掉文件，
+`netspy retry --items` 报告「成功 1，仍失败 0」并删掉文件，
 而库里那行还是旧值 —— 静默、永久、还报告成功。
 
 链条：dump 只记 table + data → retry 无条件 save_items（INSERT 而非 UPSERT）
@@ -20,12 +20,12 @@ from typing import Any
 
 import pytest
 
-from mineworker import UpdateItem, setting
-from mineworker.buffer.item_buffer import ItemBuffer
-from mineworker.commands.retry import retry_items
-from mineworker.dedup import Dedup
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils.stats import Stats
+from netspy import UpdateItem, setting
+from netspy.buffer.item_buffer import ItemBuffer
+from netspy.commands.retry import retry_items
+from netspy.dedup import Dedup
+from netspy.pipelines.base import BasePipeline
+from netspy.utils.stats import Stats
 
 
 class RefusingPipeline(BasePipeline):

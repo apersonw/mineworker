@@ -39,10 +39,10 @@ def clean_redis(redis_url: str) -> Iterator[str]:
 # ---- 顶层定义，供子进程 spawn 后重新 import ---------------------------
 def _insert_all(redis_url: str, name: str, keys: list[str], out: Any) -> None:
     """一个「节点」：把同一批 key 全部尝试插入，回报有多少次被判定为「新」。"""
-    from mineworker import setting
+    from netspy import setting
 
     setting.REDIS_URL = redis_url
-    from mineworker.dedup.redis_filter import RedisBloomFilter
+    from netspy.dedup.redis_filter import RedisBloomFilter
 
     f = RedisBloomFilter(name, capacity=200, error_rate=_ERR, max_layers=4)
     out.put(sum(1 for k in keys if f.add(k)))
@@ -92,8 +92,8 @@ def test_layers_stay_consistent_across_processes(clean_redis: str) -> None:
     fresh_total = sum(out.get() for _ in range(3))
     assert fresh_total == sum(len(g) for g in groups), "有 key 被误判成已存在（漏抓）"
 
-    from mineworker import setting
-    from mineworker.dedup.redis_filter import RedisBloomFilter
+    from netspy import setting
+    from netspy.dedup.redis_filter import RedisBloomFilter
 
     setting.REDIS_URL = clean_redis
     late = RedisBloomFilter(name, capacity=200, error_rate=_ERR, max_layers=4)

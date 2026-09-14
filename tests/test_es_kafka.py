@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
-from mineworker.pipelines.elasticsearch import ElasticsearchPipeline
-from mineworker.pipelines.kafka import KafkaPipeline
+from netspy.pipelines.elasticsearch import ElasticsearchPipeline
+from netspy.pipelines.kafka import KafkaPipeline
 
 ITEMS = [{"url": "https://a", "title": "一"}, {"url": "https://b", "title": "二"}]
 

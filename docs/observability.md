@@ -6,17 +6,17 @@
 再打一行**给机器看**的：
 
 ```
-MINEWORKER_RUN_SUMMARY {"schema":1,"request_ok":63,"items":60,"run_id":"...","spider":"BookSpider",...}
+NETSPY_RUN_SUMMARY {"schema":1,"request_ok":63,"items":60,"run_id":"...","spider":"BookSpider",...}
 ```
 
-为什么单列一行：编排层（如 MineWorkerHub）读容器日志判成败，此前只能看 exit code——
+为什么单列一行：编排层（如 NetspyHub）读容器日志判成败，此前只能看 exit code——
 一个空转的实例（种子锁还在、队列空、`request_ok=0`）照样 exit 0，被记成成功。
 生产上一个定时任务两天里 1158/1160 个实例就是这么静默空转的（见
 [运行作用域](distributed.md#运行作用域定时重跑)）。这行摘要让「跑了」和「抓了」
 从日志里一眼可分。
 
 - **走 stdout，不走日志**：不受 `LOG_LEVEL` 影响（有人把 worker 压到 `WARNING`），
-  也不带 loguru 的时间戳 / 颜色——解析方按前缀 `MINEWORKER_RUN_SUMMARY ` 找到该行、
+  也不带 loguru 的时间戳 / 颜色——解析方按前缀 `NETSPY_RUN_SUMMARY ` 找到该行、
   取其后的一段当 JSON 即可。
 - 字段是**对外契约**：前缀、`schema`、各计数键名都保持稳定；字段增删时 `schema` +1。
 - 关掉：`RUN_SUMMARY_ENABLE = False`。**在进程内嵌入爬虫、自己解析 stdout 的工具**
@@ -31,7 +31,7 @@ MINEWORKER_RUN_SUMMARY {"schema":1,"request_ok":63,"items":60,"run_id":"...","sp
 ```python
 METRICS_ENABLE = True
 METRICS_LOG_INTERVAL = 10          # 每 10 秒打一行进度
-METRICS_PROMETHEUS_PORT = 9100     # >0 且装了 mineworker[metrics] 时起 exporter
+METRICS_PROMETHEUS_PORT = 9100     # >0 且装了 netspy[metrics] 时起 exporter
 ```
 
 进度行：
@@ -43,11 +43,11 @@ metrics - 进度 | 成功 1240 失败 12 重试 30 | 队列 88 在途 4 | 入库
 Prometheus（`http://localhost:9100/metrics`）：
 
 ```
-mineworker_request_ok 1240.0
-mineworker_request_failed 12.0
-mineworker_item 1180.0
-mineworker_queue_depth 88.0
-mineworker_in_flight 4.0
+netspy_request_ok 1240.0
+netspy_request_failed 12.0
+netspy_item 1180.0
+netspy_queue_depth 88.0
+netspy_in_flight 4.0
 ```
 
 ## 告警
@@ -77,8 +77,8 @@ WARNING_INTERVAL = 300         # 同类告警最小间隔，防刷屏
 钉钉群机器人必须配安全设置，两选一：
 
 - **加签** —— 填 `WARNING_DINGTALK_SECRET`，框架自动带上 `timestamp` 和签名
-- **自定义关键词** —— 不填 secret；消息标题固定带 `【MineWorker】`，
-  把关键词设成 `MineWorker` 即可
+- **自定义关键词** —— 不填 secret；消息标题固定带 `【Netspy】`，
+  把关键词设成 `Netspy` 即可
 
 企业微信没有签名机制，webhook 里的 key 就是凭据。
 
@@ -103,12 +103,12 @@ NewsSpider(debug=True).start()
 ```
 
 `debug=True` → 日志转 `DEBUG`、强制单线程，方便逐条跟踪。等价于
-`MINEWORKER_DEBUG=true MINEWORKER_LOG_LEVEL=DEBUG python main.py`。
+`NETSPY_DEBUG=true NETSPY_LOG_LEVEL=DEBUG python main.py`。
 
 ## 崩溃恢复
 
 - `failed_requests.jsonl` —— 中断退出时未完成的请求、以及重试耗尽的请求。
-  `mineworker retry --requests` 是**探活**（重新下载看状态码，不跑回调、不入库，记录一条不删）；
+  `netspy retry --requests` 是**探活**（重新下载看状态码，不跑回调、不入库，记录一条不删）；
   要把数据抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫 —— 那会把这些请求灌回队列，
   走完整的下载 → 回调 → 落库
-- `failed_items.jsonl` —— 写库失败的数据；`mineworker retry --items` 重放到管道
+- `failed_items.jsonl` —— 写库失败的数据；`netspy retry --items` 重放到管道

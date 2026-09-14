@@ -3,7 +3,7 @@
 可以直接跑的完整示例。
 
 ```bash
-pip install mineworker
+pip install netspy
 python examples/books_toscrape.py
 ```
 
@@ -16,8 +16,8 @@ python examples/books_toscrape.py
 示例抓的是 [books.toscrape.com](https://books.toscrape.com/) ——
 Zyte 专门为爬虫练习搭建的站点，可以放心跑。
 
-**换成你自己的目标站之前**，先读一遍[反爬对抗](https://apersonw.github.io/mineworker/anti-bot/)
-和[限速](https://apersonw.github.io/mineworker/spider/#_5)：
+**换成你自己的目标站之前**，先读一遍[反爬对抗](https://apersonw.github.io/netspy/anti-bot/)
+和[限速](https://apersonw.github.io/netspy/spider/#_5)：
 默认配置对练习站够用，对真实站点通常需要按对方承受能力重新调。
 
 ## 示例里那几行礼貌性设置

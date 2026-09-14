@@ -15,20 +15,20 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-import mineworker as mw
-from mineworker import setting
-from mineworker.network.downloader import close_default_downloaders
+import netspy as mw
+from netspy import setting
+from netspy.network.downloader import close_default_downloaders
 
 
 @pytest.fixture(autouse=True)
 def _quiet() -> Iterator[None]:
-    from mineworker.network import throttle
+    from netspy.network import throttle
 
     throttle.reset()
     setting.ITEM_PIPELINES = []
     setting.SPIDER_THREAD_COUNT = 1
     setting.LOG_LEVEL = "CRITICAL"
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
     yield
@@ -178,7 +178,7 @@ def test_concurrency_cap_observed_by_server(
     httpserver: HTTPServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """服务端观测到的并发必须被压到上限 —— 证明限速真的作用在完整链路上。"""
-    from mineworker.network import throttle
+    from netspy.network import throttle
 
     throttle.reset()
     monkeypatch.setattr(setting, "CONCURRENT_REQUESTS_PER_DOMAIN", 2)
@@ -221,7 +221,7 @@ def test_default_cap_does_not_bind_default_threads(
     httpserver: HTTPServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """默认上限 8 > 默认线程数 4 —— 对默认配置应当完全无感。"""
-    from mineworker.network import throttle
+    from netspy.network import throttle
 
     throttle.reset()
     monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 4)

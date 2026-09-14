@@ -11,8 +11,8 @@ from pytest_httpserver import HTTPServer
 from werkzeug import Request as WRequest
 from werkzeug import Response as WResponse
 
-from mineworker import AirSpider, Request, setting
-from mineworker.exceptions import NotRetryError, ValidationError
+from netspy import AirSpider, Request, setting
+from netspy.exceptions import NotRetryError, ValidationError
 
 
 @pytest.fixture(autouse=True)

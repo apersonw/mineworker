@@ -26,10 +26,10 @@ yield item
 
 ```python
 ITEM_PIPELINES = [
-    "mineworker.pipelines.console.ConsolePipeline",
-    "mineworker.pipelines.csv.CsvPipeline",
-    "mineworker.pipelines.mongo.MongoPipeline",
-    "mineworker.pipelines.mysql.MysqlPipeline",
+    "netspy.pipelines.console.ConsolePipeline",
+    "netspy.pipelines.csv.CsvPipeline",
+    "netspy.pipelines.mongo.MongoPipeline",
+    "netspy.pipelines.mysql.MysqlPipeline",
 ]
 ```
 
@@ -40,18 +40,18 @@ ITEM_PIPELINES = [
 | `MongoPipeline` | `insert_many`；`UpdateItem` 按 `__update_key__` 逐条 `update_one` upsert |
 | `MysqlPipeline` | `executemany` 批量写；`MYSQL_UPDATE_ON_DUPLICATE=True` 时用 `INSERT ... ON DUPLICATE KEY UPDATE` 按唯一键 upsert；`UpdateItem` 按 `__update_key__` 逐条 `UPDATE` |
 
-自定义：继承 `mineworker.pipelines.base.BasePipeline`，实现 `save_items(table, items) -> bool`
+自定义：继承 `netspy.pipelines.base.BasePipeline`，实现 `save_items(table, items) -> bool`
 （返回 `False` 该批会被 dump 到 `failed_items.jsonl`）。
 
 单个 Item 可覆盖管道：`item.pipelines = ["myproj.pipelines.SpecialPipeline"]`。
 
 ## MySQL
 
-`pip install "mineworker[mysql]"`，连接信息走配置（`MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER`
+`pip install "netspy[mysql]"`，连接信息走配置（`MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER`
 / `MYSQL_PASSWORD` / `MYSQL_DB`），底层是 pymysql + DBUtils 连接池。
 
 ```python
-ITEM_PIPELINES = ["mineworker.pipelines.mysql.MysqlPipeline"]
+ITEM_PIPELINES = ["netspy.pipelines.mysql.MysqlPipeline"]
 ```
 
 `save_items` 把一批数据拼成一条 `executemany`，字段以每批第一条为准（和 `CsvPipeline` 一致）。
@@ -61,8 +61,8 @@ ITEM_PIPELINES = ["mineworker.pipelines.mysql.MysqlPipeline"]
 ### 用表结构反射生成 Item
 
 ```bash
-mineworker create -i news --table news
-mineworker create -i news --table news --mysql mysql://root:pwd@10.0.0.2:3306/spider
+netspy create -i news --table news
+netspy create -i news --table news --mysql mysql://root:pwd@10.0.0.2:3306/spider
 ```
 
 读 `SHOW FULL COLUMNS FROM news`，生成的 Item 带 `__table_name__`、按主键填好
@@ -71,11 +71,11 @@ mineworker create -i news --table news --mysql mysql://root:pwd@10.0.0.2:3306/sp
 
 ## PostgreSQL
 
-`pip install "mineworker[postgres]"`，连接信息走 `POSTGRES_HOST` / `POSTGRES_PORT` /
+`pip install "netspy[postgres]"`，连接信息走 `POSTGRES_HOST` / `POSTGRES_PORT` /
 `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`，底层是 psycopg 3 + `psycopg_pool`。
 
 ```python
-ITEM_PIPELINES = ["mineworker.pipelines.postgres.PostgresPipeline"]
+ITEM_PIPELINES = ["netspy.pipelines.postgres.PostgresPipeline"]
 ```
 
 写入骨架和 MySQL 完全一样（同一个 `SqlPipeline` 基类），**差别只在冲突处理**：
@@ -97,17 +97,17 @@ POSTGRES_CONFLICT_TARGET = ["url"]   # 通常是唯一索引的列
 宁可少写几条，也好过整批抛异常。冲突目标列本身不会出现在 `SET` 里（Postgres 会报错）。
 
 !!! note "许可证"
-    psycopg 是 **LGPL-3.0**，而 MineWorker 是 MIT。它是**可选** extra、由你自行安装、
-    未被打包进本项目，因此不影响 MineWorker 的授权；但如果贵司对 LGPL 依赖有合规要求，
+    psycopg 是 **LGPL-3.0**，而 Netspy 是 MIT。它是**可选** extra、由你自行安装、
+    未被打包进本项目，因此不影响 Netspy 的授权；但如果贵司对 LGPL 依赖有合规要求，
     这里提前知会一声。
 
 ## Elasticsearch
 
-`pip install "mineworker[elasticsearch]"`，地址走 `ELASTICSEARCH_HOSTS`。
+`pip install "netspy[elasticsearch]"`，地址走 `ELASTICSEARCH_HOSTS`。
 `table_name` 当索引名，`save_items` 走官方 `helpers.bulk`。
 
 ```python
-ITEM_PIPELINES = ["mineworker.pipelines.elasticsearch.ElasticsearchPipeline"]
+ITEM_PIPELINES = ["netspy.pipelines.elasticsearch.ElasticsearchPipeline"]
 ```
 
 `UpdateItem` 会把 `__update_key__` 各字段的值拼成 `_id` 做 upsert（`doc_as_upsert`），
@@ -115,11 +115,11 @@ ITEM_PIPELINES = ["mineworker.pipelines.elasticsearch.ElasticsearchPipeline"]
 
 ## Kafka
 
-`pip install "mineworker[kafka]"`，地址走 `KAFKA_BOOTSTRAP_SERVERS`。
+`pip install "netspy[kafka]"`，地址走 `KAFKA_BOOTSTRAP_SERVERS`。
 `table_name` 当 topic，每条 Item 序列化成一条 JSON 消息。
 
 ```python
-ITEM_PIPELINES = ["mineworker.pipelines.kafka.KafkaPipeline"]
+ITEM_PIPELINES = ["netspy.pipelines.kafka.KafkaPipeline"]
 ```
 
 !!! warning "它是投递，不是存储"
@@ -167,7 +167,7 @@ DEDUP_FILTER = "lite"     # 精确 set，内存换准确
 ## 写库失败
 
 某批 `save_items` 返回 `False` → dump 到 `failed_items.jsonl`，指纹不记。
-恢复：`mineworker retry --items`（仍失败的写回文件，全部成功则删除文件）。
+恢复：`netspy retry --items`（仍失败的写回文件，全部成功则删除文件）。
 
 dump 出来的每行**带着回放所需的全部信息**，而不只是表名和数据：
 

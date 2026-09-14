@@ -79,8 +79,8 @@ def tables(mysql_db: Any) -> Iterator[Any]:
 
 
 def _common_setting(mysql_url: str, redis_url: str) -> None:
-    from mineworker import setting
-    from mineworker.utils import log
+    from netspy import setting
+    from netspy.utils import log
 
     setting.reload()
     setting.REDIS_URL = redis_url
@@ -99,19 +99,19 @@ def _common_setting(mysql_url: str, redis_url: str) -> None:
     setting.MYSQL_PORT = parsed.port or 3306
     setting.MYSQL_USER = parsed.username or "root"
     setting.MYSQL_PASSWORD = parsed.password or ""
-    setting.MYSQL_DB = (parsed.path or "/mineworker").lstrip("/")
+    setting.MYSQL_DB = (parsed.path or "/netspy").lstrip("/")
     log.configure()
 
 
 def _worker(base: str, mysql_url: str, redis_url: str, key: str) -> None:
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.core.batch_store import MysqlBatchStore
-    from mineworker.core.spiders.batch_spider import BatchSpider
-    from mineworker.db.mysqldb import MysqlDB
+    import netspy as mw
+    from netspy import setting
+    from netspy.core.batch_store import MysqlBatchStore
+    from netspy.core.spiders.batch_spider import BatchSpider
+    from netspy.db.mysqldb import MysqlDB
 
     _common_setting(mysql_url, redis_url)
-    setting.ITEM_PIPELINES = ["mineworker.pipelines.mysql.MysqlPipeline"]
+    setting.ITEM_PIPELINES = ["netspy.pipelines.mysql.MysqlPipeline"]
 
     class Row(mw.Item):
         __table_name__ = DATA_TABLE
@@ -137,11 +137,11 @@ def _worker(base: str, mysql_url: str, redis_url: str, key: str) -> None:
 
 
 def _master(base: str, mysql_url: str, redis_url: str, key: str) -> None:
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.core.batch_store import MysqlBatchStore
-    from mineworker.core.spiders.batch_spider import BatchSpider
-    from mineworker.db.mysqldb import MysqlDB
+    import netspy as mw
+    from netspy import setting
+    from netspy.core.batch_store import MysqlBatchStore
+    from netspy.core.spiders.batch_spider import BatchSpider
+    from netspy.db.mysqldb import MysqlDB
 
     _common_setting(mysql_url, redis_url)
     setting.ITEM_PIPELINES = []

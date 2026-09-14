@@ -7,10 +7,10 @@ import httpx
 import pytest
 import respx
 
-from mineworker import Request, RequestError, setting
-from mineworker.network.downloader import close_default_downloaders, get_default_downloader
-from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader, loop_count
-from mineworker.network.user_agent import USER_AGENTS
+from netspy import Request, RequestError, setting
+from netspy.network.downloader import close_default_downloaders, get_default_downloader
+from netspy.network.downloader._async_httpx import AsyncHttpxDownloader, loop_count
+from netspy.network.user_agent import USER_AGENTS
 
 
 @pytest.fixture

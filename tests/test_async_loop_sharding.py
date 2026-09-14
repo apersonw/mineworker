@@ -26,8 +26,8 @@ import threading
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader, loop_count
+from netspy import setting
+from netspy.network.downloader._async_httpx import AsyncHttpxDownloader, loop_count
 
 
 def test_loop_count_follows_thread_count(monkeypatch: pytest.MonkeyPatch) -> None:

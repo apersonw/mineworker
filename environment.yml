@@ -1,6 +1,6 @@
-# conda 开发环境：conda env create -f environment.yml && conda activate mineworker
+# conda 开发环境：conda env create -f environment.yml && conda activate netspy
 # 之后 pre-commit install
-name: mineworker
+name: netspy
 channels:
   - conda-forge
 dependencies:

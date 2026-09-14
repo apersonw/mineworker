@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from mineworker.utils import tools
+from netspy.utils import tools
 
 
 def test_md5_is_stable_and_sensitive() -> None:
@@ -41,7 +41,7 @@ def test_load_object_rejects_bad_paths() -> None:
     with pytest.raises(ValueError, match="对象路径"):
         tools.load_object("nodot")
     with pytest.raises(ModuleNotFoundError):
-        tools.load_object("mineworker._no_such_module.x")
+        tools.load_object("netspy._no_such_module.x")
     with pytest.raises(ImportError):
         tools.load_object("json.does_not_exist")
 

@@ -20,9 +20,9 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.core.base_scheduler import BaseScheduler
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.core.base_scheduler import BaseScheduler
+from netspy.network.request import Request
 
 
 class _Buffer:
@@ -112,8 +112,8 @@ def test_probe_keeps_every_record(monkeypatch: pytest.MonkeyPatch, _on: Path) ->
 
     早先的版本在这里把成功探到的记录删掉了 —— 那是唯一副本。
     """
-    from mineworker.commands import retry as retry_mod
-    from mineworker.network.response import Response
+    from netspy.commands import retry as retry_mod
+    from netspy.network.response import Response
 
     dump = Path(setting.FAILED_REQUEST_PATH)
     _write(dump, "http://example.com/p/1")

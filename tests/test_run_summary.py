@@ -1,4 +1,4 @@
-"""爬虫结束时吐一行**机器可读**的摘要，供 MineWorkerHub 读容器日志用。
+"""爬虫结束时吐一行**机器可读**的摘要，供 NetspyHub 读容器日志用。
 
 **为什么要它。** 生产复盘（见 test_run_scope）里，Hub 判成败只看 exit code，
 1158 个空转实例全被记成 success —— 它没有任何办法从日志里读出「请求成功 0」。
@@ -19,17 +19,17 @@ import fakeredis
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import Item, Request, Spider, setting
-from mineworker.core import redis_scheduler
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils.stats import RUN_SUMMARY_MARKER
+from netspy import Item, Request, Spider, setting
+from netspy.core import redis_scheduler
+from netspy.pipelines.base import BasePipeline
+from netspy.utils.stats import RUN_SUMMARY_MARKER
 
 
 @pytest.fixture(autouse=True)
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
-    from mineworker.dedup import redis_filter
+    from netspy.dedup import redis_filter
 
     monkeypatch.setattr(redis_filter, "_default_redis", lambda: client)
     yield client
@@ -149,7 +149,7 @@ def test_summary_survives_a_quiet_log_level(
     生产 worker 里真有人把日志压到 WARNING。契约行受 LOG_LEVEL 摆布的话，
     Hub 就又什么都读不到了。
     """
-    from mineworker.utils import log
+    from netspy.utils import log
 
     monkeypatch.setattr(setting, "LOG_LEVEL", "CRITICAL")
     log.configure()
@@ -193,7 +193,7 @@ def test_summary_carries_run_context_when_scoped(
 
     s = _summary_lines(capsys.readouterr().out)[-1]
     assert s["run_id"] == "run-42"
-    assert s["namespace"] == "mineworker:sum4:run:run-42"
+    assert s["namespace"] == "netspy:sum4:run:run-42"
 
 
 def test_summary_run_id_is_empty_for_single_machine(

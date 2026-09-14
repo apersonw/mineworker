@@ -2,12 +2,12 @@
 
 优先级（后者覆盖前者）：
 
-1. 框架默认值（`mineworker/setting.py`）
-2. 运行目录下的 `setting.py` / `settings.py`（或 `MINEWORKER_SETTING` 指定的文件）
-3. 环境变量 `MINEWORKER_<KEY>`（按默认值类型自动转换，dict / list 传 JSON）
+1. 框架默认值（`netspy/setting.py`）
+2. 运行目录下的 `setting.py` / `settings.py`（或 `NETSPY_SETTING` 指定的文件）
+3. 环境变量 `NETSPY_<KEY>`（按默认值类型自动转换，dict / list 传 JSON）
 
 ```bash
-MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
+NETSPY_SPIDER_THREAD_COUNT=8 NETSPY_LOG_LEVEL=DEBUG python main.py
 ```
 
 爬虫内 `__custom_setting__` 会在实例化时合并进全局配置。
@@ -25,7 +25,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `COLLECTOR_TASK_COUNT` | `100` | collector 单次从队列取多少任务 |
 | `DONE_CHECK_TIMES` / `DONE_CHECK_INTERVAL` | `3` / `0.5` | 结束检测的复查次数与间隔 |
 | `DUMP_UNFINISHED_ON_EXIT` | `True` | 中断时 dump 未完成请求 |
-| `RUN_SUMMARY_ENABLE` | `True` | 结束时在 stdout 打一行机器可读摘要 `MINEWORKER_RUN_SUMMARY {...}`，供编排层读容器日志区分「跑了」和「抓了」，见[运行摘要](observability.md#运行摘要机器可读) |
+| `RUN_SUMMARY_ENABLE` | `True` | 结束时在 stdout 打一行机器可读摘要 `NETSPY_RUN_SUMMARY {...}`，供编排层读容器日志区分「跑了」和「抓了」，见[运行摘要](observability.md#运行摘要机器可读) |
 
 ## 请求
 
@@ -40,7 +40,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RANDOMIZE_DOWNLOAD_DELAY` | `True` | 给上面的间隔加 ±50% 抖动 |
 | `GLOBAL_THROTTLE` | `False` | 让 `DOWNLOAD_DELAY` 跨节点全局生效（需 Redis）。关闭时 N 个节点就是 N 倍速率，见[全局限速](spider.md#跨节点全局限速) |
 | `RESPONSE_CACHE_ENABLE` | `False` | 缓存响应，重跑读本地文件。**只在开发期开**，见[响应缓存](spider.md#响应缓存开发调试用) |
-| `RESPONSE_CACHE_PATH` | `".mineworker_cache"` | 缓存目录 |
+| `RESPONSE_CACHE_PATH` | `".netspy_cache"` | 缓存目录 |
 | `RESPONSE_CACHE_EXPIRE` | `3600.0` | 缓存有效期（秒）；`0` = 不过期 |
 | `MAX_RESPONSE_SIZE` | `33554432` | 响应体上限（字节，32MB）；`0` = 不限。**行为变更**，见[资源边界](spider.md#资源边界) |
 | `ALLOWED_CONTENT_TYPES` | `[]` | Content-Type 前缀白名单；空 = 不过滤。命中不了的响应不读 body 直接断开 |
@@ -61,7 +61,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `DOWNLOADER_ASYNC_CONCURRENCY` | `200` | async 下载器的信号量与连接池上限。**不是实际在途数** —— 实际在途由 `SPIDER_THREAD_COUNT` 决定，见下 |
 | `ASYNC_THREADS_PER_LOOP` | `16` | 每个事件循环最多服务多少工作线程，超出再开一个；`0` = 不分片。见下 |
 | `HTTPX_HTTP2` | `False` | httpx 开 HTTP/2（需 `pip install "httpx[http2]"`） |
-| `DOWNLOADER_IMPERSONATE` | `""` | 伪装浏览器 TLS / HTTP2 指纹，填 `"chrome"` 等即启用（需 `pip install "mineworker[curl]"`），见[反爬对抗](anti-bot.md) |
+| `DOWNLOADER_IMPERSONATE` | `""` | 伪装浏览器 TLS / HTTP2 指纹，填 `"chrome"` 等即启用（需 `pip install "netspy[curl]"`），见[反爬对抗](anti-bot.md) |
 | `ANTIBOT_DETECT` | `True` | 识别 Cloudflare / Akamai 挑战页，命中抛 `AntiBotError`（走既有重试 + 换代理） |
 
 ## Item / 管道 / 去重
@@ -82,30 +82,30 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `RUN_ID` | `""` | 一次「运行」的标识。设了之后队列 / 种子锁 / 在途 / 心跳 / 失败列表落到 `<prefix>:<redis_key>:run:<id>` 下，每次运行互不相干；同一个 id 再起 = 续那次运行。**定时重跑的分布式任务必须设**，见[运行作用域](distributed.md#运行作用域定时重跑) |
 | `DEDUP_SCOPE` | `"auto"` | 去重落在哪：`run`（本次运行下，重跑从头抓）\| `spider`（跨运行持久，增量爬）\| `auto`（有 `RUN_ID` 就是 run，否则 spider） |
 | `RUN_TTL` | `604800` | 运行作用域下 key 的保留秒数（7 天）。跑着时由心跳续期，结束后到期自动清理 |
-| `MONGO_URI` / `MONGO_DB` | `localhost` / `mineworker` | |
+| `MONGO_URI` / `MONGO_DB` | `localhost` / `netspy` | |
 
 ## MySQL
 
-`pip install "mineworker[mysql]"`。用于 `MysqlPipeline` 与 `create -i --table`。
+`pip install "netspy[mysql]"`。用于 `MysqlPipeline` 与 `create -i --table`。
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `MYSQL_HOST` / `MYSQL_PORT` | `localhost` / `3306` | |
 | `MYSQL_USER` / `MYSQL_PASSWORD` | `root` / `""` | |
-| `MYSQL_DB` | `"mineworker"` | 库名 |
+| `MYSQL_DB` | `"netspy"` | 库名 |
 | `MYSQL_POOL_SIZE` | `5` | 连接池上限 |
 | `MYSQL_UPDATE_ON_DUPLICATE` | `True` | `save_items` 用 `INSERT ... ON DUPLICATE KEY UPDATE` |
 
 ## PostgreSQL
 
-`pip install "mineworker[postgres]"`。用于 `PostgresPipeline`。psycopg 是 LGPL-3.0，
+`pip install "netspy[postgres]"`。用于 `PostgresPipeline`。psycopg 是 LGPL-3.0，
 详见[数据与去重](item-pipeline.md#postgresql)。
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `POSTGRES_HOST` / `POSTGRES_PORT` | `localhost` / `5432` | |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | `postgres` / `""` | |
-| `POSTGRES_DB` | `"mineworker"` | 库名 |
+| `POSTGRES_DB` | `"netspy"` | 库名 |
 | `POSTGRES_POOL_SIZE` | `5` | 连接池上限 |
 | `POSTGRES_ON_CONFLICT` | `"nothing"` | `error` 冲突报错 / `nothing` 跳过 / `update` upsert |
 | `POSTGRES_CONFLICT_TARGET` | `[]` | `update` 模式下的冲突列，通常是唯一索引的列 |
@@ -114,8 +114,8 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `ELASTICSEARCH_HOSTS` | `["http://localhost:9200"]` | 需 `pip install "mineworker[elasticsearch]"` |
-| `KAFKA_BOOTSTRAP_SERVERS` | `["localhost:9092"]` | 需 `pip install "mineworker[kafka]"` |
+| `ELASTICSEARCH_HOSTS` | `["http://localhost:9200"]` | 需 `pip install "netspy[elasticsearch]"` |
+| `KAFKA_BOOTSTRAP_SERVERS` | `["localhost:9092"]` | 需 `pip install "netspy[kafka]"` |
 
 ## 代理 / 渲染 / 指标 / 告警
 
@@ -130,7 +130,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `LOG_ROTATION` / `LOG_RETENTION` | `"50 MB"` / `"10 days"` |
 
 写爬虫 / 管道 / 中间件 / 账号池时直接用 `self.logger`，不用自己
-`from mineworker.utils.log import get_logger` 再手动 bind 一个名字：
+`from netspy.utils.log import get_logger` 再手动 bind 一个名字：
 
 ```python
 class BookSpider(mw.AirSpider):

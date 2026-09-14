@@ -18,13 +18,13 @@ from typing import Any
 import fakeredis
 import pytest
 
-from mineworker import setting
-from mineworker.dedup import Dedup
-from mineworker.dedup.bloom_filter import MemoryBloomFilter, ScalableBloomFilter
-from mineworker.dedup.redis_filter import RedisBloomFilter, RedisSetFilter
-from mineworker.utils import log
-from mineworker.utils.alert import AlertManager
-from mineworker.utils.stats import Stats
+from netspy import setting
+from netspy.dedup import Dedup
+from netspy.dedup.bloom_filter import MemoryBloomFilter, ScalableBloomFilter
+from netspy.dedup.redis_filter import RedisBloomFilter, RedisSetFilter
+from netspy.utils import log
+from netspy.utils.alert import AlertManager
+from netspy.utils.stats import Stats
 
 
 @pytest.fixture

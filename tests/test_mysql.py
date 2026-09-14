@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.commands import create as gen
-from mineworker.db.mysqldb import MysqlDB
-from mineworker.pipelines.mysql import MysqlPipeline
+from netspy import setting
+from netspy.commands import create as gen
+from netspy.db.mysqldb import MysqlDB
+from netspy.pipelines.mysql import MysqlPipeline
 
 
 class FakeDB:

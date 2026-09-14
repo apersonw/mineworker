@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import pytest
 
-from mineworker import Request, setting
-from mineworker.exceptions import AntiBotError, RequestError
-from mineworker.network import antibot
-from mineworker.network.downloader import download_request
-from mineworker.network.downloader.base import Downloader
-from mineworker.network.response import Response
+from netspy import Request, setting
+from netspy.exceptions import AntiBotError, RequestError
+from netspy.network import antibot
+from netspy.network.downloader import download_request
+from netspy.network.downloader.base import Downloader
+from netspy.network.response import Response
 
 
 def _resp(

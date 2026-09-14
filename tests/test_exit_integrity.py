@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.core.base_parser import BaseParser
-from mineworker.core.scheduler import AirScheduler
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.core.base_parser import BaseParser
+from netspy.core.scheduler import AirScheduler
+from netspy.network.request import Request
 
 
 class _Parser(BaseParser):
@@ -112,11 +112,11 @@ def test_redis_pushback_failure_falls_back_to_disk(
     """
     import fakeredis
 
-    from mineworker.core.redis_scheduler import RedisScheduler
+    from netspy.core.redis_scheduler import RedisScheduler
 
     monkeypatch.setattr(setting, "REDIS_URL", "redis://127.0.0.1:6379/0")
     monkeypatch.setattr(
-        "mineworker.db.redisdb.get_redis",
+        "netspy.db.redisdb.get_redis",
         lambda *a, **kw: fakeredis.FakeRedis(decode_responses=True),
     )
     sch = RedisScheduler(parser=_Parser(), redis_key="EXIT")
@@ -153,10 +153,10 @@ def test_pushback_clears_filter_repeat(monkeypatch: pytest.MonkeyPatch) -> None:
     """推回队列的请求要清掉 `filter_repeat`，否则会被自己写下的指纹挡掉。"""
     import fakeredis
 
-    from mineworker.core.redis_scheduler import RedisScheduler
+    from netspy.core.redis_scheduler import RedisScheduler
 
     monkeypatch.setattr(
-        "mineworker.db.redisdb.get_redis",
+        "netspy.db.redisdb.get_redis",
         lambda *a, **kw: fakeredis.FakeRedis(decode_responses=True),
     )
     sch = RedisScheduler(parser=_Parser(), redis_key="EXIT2")

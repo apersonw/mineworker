@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from mineworker import setting
-from mineworker.dedup import Dedup, LiteFilter, MemoryBloomFilter
-from mineworker.exceptions import ConfigError
+from netspy import setting
+from netspy.dedup import Dedup, LiteFilter, MemoryBloomFilter
+from netspy.exceptions import ConfigError
 
 
 def test_lite_filter_exact() -> None:

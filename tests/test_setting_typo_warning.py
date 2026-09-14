@@ -19,7 +19,7 @@ import warnings
 
 import pytest
 
-from mineworker import setting
+from netspy import setting
 
 
 def _warnings_for(mapping: dict[str, object]) -> list[str]:
@@ -113,7 +113,7 @@ def test_project_setting_file_is_checked_too(
 
     path = Path(str(tmp_path)) / "setting.py"
     path.write_text("DOWNLOAD_DELY = 2.0\nMY_API_KEY = 'k'\n", encoding="utf-8")
-    monkeypatch.setenv("MINEWORKER_SETTING", str(path))
+    monkeypatch.setenv("NETSPY_SETTING", str(path))
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -122,5 +122,5 @@ def test_project_setting_file_is_checked_too(
         assert any("DOWNLOAD_DELY" in m and "DOWNLOAD_DELAY" in m for m in msgs)
         assert not any("MY_API_KEY" in m for m in msgs), "用户自定义配置被误报"
     finally:
-        monkeypatch.delenv("MINEWORKER_SETTING", raising=False)
+        monkeypatch.delenv("NETSPY_SETTING", raising=False)
         setting.reload()

@@ -23,9 +23,9 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._httpx import HttpxDownloader
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.network.downloader._httpx import HttpxDownloader
+from netspy.network.request import Request
 
 
 class _FakeClient:
@@ -114,7 +114,7 @@ def test_request_with_cookies_gets_a_throwaway_client(downloader: Any) -> None:
 # ---- 另外两个下载器 ---------------------------------------------------
 def test_curl_downloader_reuses_per_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     """curl 下载器原来用的是和 httpx 一模一样的错判据。"""
-    from mineworker.network.downloader._curl import CurlDownloader
+    from netspy.network.downloader._curl import CurlDownloader
 
     dl = CurlDownloader(use_session=True)
     made: list[_FakeClient] = []
@@ -133,7 +133,7 @@ def test_curl_downloader_reuses_per_proxy(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_curl_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    from mineworker.network.downloader._curl import CurlDownloader
+    from netspy.network.downloader._curl import CurlDownloader
 
     monkeypatch.setattr(setting, "SESSION_CACHE_SIZE", 2)
     dl = CurlDownloader(use_session=True)
@@ -150,7 +150,7 @@ def test_async_downloader_reuses_per_proxy() -> None:
     """async 写法不同（有代理就建一次性 client），后果一样。"""
     import asyncio
 
-    from mineworker.network.downloader import _async_httpx as mod
+    from netspy.network.downloader import _async_httpx as mod
 
     dl = mod.AsyncHttpxDownloader()
 

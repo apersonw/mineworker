@@ -3,15 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mineworker"
+name = "netspy"
 dynamic = ["version"]
-description = "一个上手简单、结构清晰的 Python 爬虫框架（对标 feapder）"
+description = "一个上手简单、结构清晰的 Python 爬虫框架"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Lucas", email = "schummshelly26@gmail.com" }]
-keywords = ["crawler", "spider", "scraping", "feapder", "爬虫"]
+keywords = ["crawler", "spider", "scraping", "爬虫"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -32,11 +32,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/apersonw/mineworker"
-Repository = "https://github.com/apersonw/mineworker"
-Documentation = "https://apersonw.github.io/mineworker/"
-Changelog = "https://github.com/apersonw/mineworker/blob/main/CHANGELOG.md"
-Issues = "https://github.com/apersonw/mineworker/issues"
+Homepage = "https://github.com/apersonw/netspy"
+Repository = "https://github.com/apersonw/netspy"
+Documentation = "https://apersonw.github.io/netspy/"
+Changelog = "https://github.com/apersonw/netspy/blob/main/CHANGELOG.md"
+Issues = "https://github.com/apersonw/netspy/issues"
 
 [project.optional-dependencies]
 render = ["playwright>=1.44"]
@@ -49,9 +49,9 @@ curl = ["curl_cffi>=0.16"]  # TLS / HTTP2 指纹伪装
 postgres = ["psycopg[binary,pool]>=3.1"]  # 注意 psycopg 是 LGPL-3.0
 elasticsearch = ["elasticsearch>=8.0"]
 kafka = ["kafka-python>=2.0"]
-all = ["mineworker[render,mongo,mysql,postgres,elasticsearch,kafka,redis,cli,metrics,curl]"]
+all = ["netspy[render,mongo,mysql,postgres,elasticsearch,kafka,redis,cli,metrics,curl]"]
 dev = [
-    "mineworker[all]",
+    "netspy[all]",
     "pytest>=8",
     "pytest-cov>=5",
     "respx>=0.21",
@@ -68,17 +68,17 @@ docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [project.scripts]
 # 指向 commands/__init__ 的轻量守卫：没装 [cli] extra 时给提示而不是 ModuleNotFoundError
-mineworker = "mineworker.commands:main"
+netspy = "netspy.commands:main"
 
 [tool.hatch.version]
-path = "mineworker/__about__.py"
+path = "netspy/__about__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mineworker"]
+packages = ["netspy"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/mineworker",
+    "/netspy",
     "/tests",
     "/docs",
     "/examples",
@@ -92,7 +92,7 @@ include = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["mineworker", "tests"]
+src = ["netspy", "tests"]
 extend-exclude = ["docs", "site"]
 
 [tool.ruff.lint]
@@ -108,13 +108,13 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 "examples/*" = ["RUF012"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mineworker"]
+known-first-party = ["netspy"]
 
 # ----------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["mineworker"]
+files = ["netspy"]
 pretty = true
 
 [[tool.mypy.overrides]]
@@ -141,9 +141,9 @@ addopts = "-ra -q --strict-markers"
 markers = [
     "render: 需要 Playwright + chromium（playwright install chromium）",
     "network: 需要访问外部网络（指纹验证等），CI 里用 -m 'not network' 排除",
-    "integration: 需要真实数据库（见 MINEWORKER_TEST_*_URL 环境变量），没配就自动 skip",
+    "integration: 需要真实数据库（见 NETSPY_TEST_*_URL 环境变量），没配就自动 skip",
 ]
 
 [tool.coverage.run]
-source = ["mineworker"]
+source = ["netspy"]
 branch = true

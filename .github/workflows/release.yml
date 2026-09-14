@@ -34,7 +34,7 @@ jobs:
         run: |
           # 必须锚在 __version__ 上：__about__.py 的文档字符串在前面，宽松的 "(.+)"
           # 会先匹配到那段三引号说明，静默产出垃圾版本号
-          pkg=$(python -c "import re,pathlib; print(re.search(r'^__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('mineworker/__about__.py').read_text(), re.M).group(1))")
+          pkg=$(python -c "import re,pathlib; print(re.search(r'^__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('netspy/__about__.py').read_text(), re.M).group(1))")
 
           # 宁可在这里炸，也不要拿一个畸形版本号往下走
           if ! echo "$pkg" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([ab]|rc)?[0-9]*$'; then
@@ -75,10 +75,10 @@ jobs:
           wheel=$(ls dist/*.whl)
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install "${wheel}[cli]"
-          /tmp/smoke/bin/python -c "import mineworker; print(mineworker.__version__)"
-          /tmp/smoke/bin/mineworker --version
+          /tmp/smoke/bin/python -c "import netspy; print(netspy.__version__)"
+          /tmp/smoke/bin/netspy --version
           # 产物版本必须与解析出的版本一致
-          test "$(/tmp/smoke/bin/python -c 'import mineworker; print(mineworker.__version__)')" \
+          test "$(/tmp/smoke/bin/python -c 'import netspy; print(netspy.__version__)')" \
              = "${{ steps.meta.outputs.version }}"
 
       - uses: actions/upload-artifact@v7

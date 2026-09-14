@@ -1,0 +1,52 @@
+# 项目配置：只需写要覆盖的项，其余用框架默认值（见 netspy/setting.py）。
+# 运行目录下的 setting.py 会被自动加载；环境变量 NETSPY_<KEY> 优先级最高。
+
+# ---- 调度 ----
+SPIDER_THREAD_COUNT = 4
+SPIDER_MAX_RETRY_TIMES = 3
+
+# ---- 请求 ----
+REQUEST_TIMEOUT = 22
+RANDOM_USER_AGENT = True
+
+# ---- 礼貌性 ----
+# 新项目默认遵守 robots.txt（框架的库默认值是 False）。
+# 抓自己的站点 / 内网服务时可以关掉。
+ROBOTS_OBEY = True
+# 单域最大在途请求数；同域两次请求的最小间隔（秒）。
+# ⚠️ 进程内生效：分布式起 N 个节点，目标站承受的就是 N 倍。
+CONCURRENT_REQUESTS_PER_DOMAIN = 8
+DOWNLOAD_DELAY = 0
+
+# ---- 数据管道 ----
+ITEM_PIPELINES = [
+    "netspy.pipelines.console.ConsolePipeline",
+    # "netspy.pipelines.csv.CsvPipeline",
+    # "netspy.pipelines.mongo.MongoPipeline",
+    # "netspy.pipelines.mysql.MysqlPipeline",
+]
+ITEM_DEFAULT_TABLE = "items"
+
+# ---- 去重 ----
+DEDUP_FILTER = "memory"  # memory（布隆，省内存）| lite（精确 set）
+
+# ---- MongoDB（用到 MongoPipeline 时）----
+# MONGO_URI = "mongodb://localhost:27017"
+# MONGO_DB = "{{ project_name }}"
+
+# ---- MySQL（用到 MysqlPipeline / create -i --table 时）----
+# MYSQL_HOST = "localhost"
+# MYSQL_PORT = 3306
+# MYSQL_USER = "root"
+# MYSQL_PASSWORD = ""
+# MYSQL_DB = "{{ project_name }}"
+
+# ---- 浏览器渲染（Request(render=True) 时）----
+# WEBDRIVER = dict(pool_size=1, headless=True, load_images=False, render_time=0)
+
+# ---- 日志 ----
+LOG_LEVEL = "INFO"
+# LOG_FILE = "log/spider.log"
+
+# ---- 告警（阶段 06）----
+# WARNING_FEISHU_WEBHOOK = ""

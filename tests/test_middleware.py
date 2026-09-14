@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import AirSpider, Request, Response, setting
-from mineworker.network.middleware import DownloaderMiddleware, MiddlewareManager
+from netspy import AirSpider, Request, Response, setting
+from netspy.network.middleware import DownloaderMiddleware, MiddlewareManager
 
 _MOD = __name__
 

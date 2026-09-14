@@ -3,6 +3,28 @@
 本文件格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.0] - 2026-09-15
+
+项目更名：**MineWorker → Netspy**。同一套代码、同一个作者，只是换了个名字——
+`mineworker` 是随手取的，`netspy` 是重新挑的。
+
+- PyPI 包名 `mineworker` → `netspy`；旧包停在 0.23.0，不再发布新版本。
+- GitHub 仓库 `apersonw/mineworker` → `apersonw/netspy`。
+- 环境变量前缀 `MINEWORKER_*` → `NETSPY_*`（**硬切，无兼容期**）。
+- 异常基类 `MineWorkerError` → `NetspyError`。
+- 运行摘要 stdout 契约行 `MINEWORKER_RUN_SUMMARY` → `NETSPY_RUN_SUMMARY`。
+- Prometheus 指标名前缀 `mineworker_*` → `netspy_*`；默认 Redis key 前缀、
+  响应缓存目录 `.mineworker_cache` → `.netspy_cache` 同步改名。
+- 飞书 / 钉钉 / 企业微信告警标题前缀、邮件主题前缀里的品牌字样同步改成 `Netspy`——
+  **如果给机器人配了"标题含 MineWorker 才转发"这类关键词过滤规则，需要跟着改关键词**。
+- 移除 README / 文档里"对标 feapder"的定位描述，删除通篇围绕这一定位写的
+  `IMPLEMENTATION_PLAN.md`；历史 CHANGELOG 条目里出现的 `feapder` /
+  `mineworker` 字样保持原样，不做回溯改写。
+
+**因为是全新的 PyPI 项目，版本号从 0.1.0 重新起**，不延续改名前的 0.23.0。
+改名前的完整版本历史见下方 [0.23.0] 及更早的条目——那些描述的都是当时
+名叫 `mineworker` 时的行为，不回溯改写。
+
 ## [0.23.0] - 2026-09-14
 
 ### 新增

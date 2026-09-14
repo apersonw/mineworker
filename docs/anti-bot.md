@@ -23,7 +23,7 @@ DataDome、PerimeterX）看的是**你还没发出第一个字节前**就已经�
 ## 启用指纹伪装
 
 ```bash
-pip install "mineworker[curl]"
+pip install "netspy[curl]"
 ```
 
 ```python
@@ -69,7 +69,7 @@ yield mw.Request(url, impersonate="")        # 这一条不伪装
 框架默认开启识别（`ANTIBOT_DETECT = True`），命中就抛 `AntiBotError`：
 
 ```python
-from mineworker.exceptions import AntiBotError
+from netspy.exceptions import AntiBotError
 ```
 
 `AntiBotError` 继承 `RequestError`，所以走的是既有的下载失败路径 —— **自动重试，
@@ -95,7 +95,7 @@ ANTIBOT_DETECT = False
 也可以只做判断不抛异常：
 
 ```python
-from mineworker.network import antibot
+from netspy.network import antibot
 
 def parse(self, request, response):
     if antibot.detect(response):

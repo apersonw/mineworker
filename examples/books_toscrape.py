@@ -12,14 +12,14 @@
 
 跑起来：
 
-    pip install mineworker
+    pip install netspy
     python examples/books_toscrape.py
 """
 
 from __future__ import annotations
 
-import mineworker as mw
-from mineworker import setting
+import netspy as mw
+from netspy import setting
 
 BASE = "https://books.toscrape.com/"
 MAX_LIST_PAGES = 3  # 只抓前几页，示例不必贪多
@@ -75,6 +75,6 @@ if __name__ == "__main__":
     setting.CONCURRENT_REQUESTS_PER_DOMAIN = 4  # 单域最多 4 个在途
     setting.DOWNLOAD_DELAY = 0.3  # 同域两次请求至少隔 0.3s
     # 默认管道把 Item 打到日志；换成 CsvPipeline / MysqlPipeline 即可落库
-    setting.ITEM_PIPELINES = ["mineworker.pipelines.console.ConsolePipeline"]
+    setting.ITEM_PIPELINES = ["netspy.pipelines.console.ConsolePipeline"]
 
     BookSpider().start()

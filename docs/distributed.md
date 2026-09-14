@@ -3,7 +3,7 @@
 `Spider` 把队列和去重都放到 Redis，多个进程 / 多台机器跑同一个爬虫、共享进度、断点续爬。
 
 ```bash
-pip install "mineworker[redis]"
+pip install "netspy[redis]"
 ```
 
 ## 用法
@@ -11,7 +11,7 @@ pip install "mineworker[redis]"
 和 `AirSpider` 一模一样，只是换个基类：
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class NewsSpider(mw.Spider):
@@ -68,7 +68,7 @@ python main.py    # 机器 B —— 自动加入，一起消费队列
 修法是给「运行」一个身份：
 
 ```bash
-export MINEWORKER_RUN_ID=$(date +%s)     # 或任何每次都不同的字符串
+export NETSPY_RUN_ID=$(date +%s)     # 或任何每次都不同的字符串
 python main.py
 ```
 
@@ -88,8 +88,8 @@ python main.py
 真要增量爬，显式写 `DEDUP_SCOPE = "spider"`，启动时会打一行 INFO 说明
 本轮不会重抓以前抓过的 URL。
 
-[MineWorkerHub](https://github.com/apersonw/mineworkerhub) 给每个实例自动注入
-`MINEWORKER_RUN_ID`，平台上的任务不用管这件事。
+[NetspyHub](https://github.com/apersonw/netspyhub) 给每个实例自动注入
+`NETSPY_RUN_ID`，平台上的任务不用管这件事。
 
 `BatchSpider` 不受 `RUN_ID` 影响：它的身份是批次作业，批次本身就是重跑单位。
 
@@ -110,7 +110,7 @@ NewsSpider(keep_alive=True).start()
 
 ```python
 REDIS_URL = "redis://:password@host:6379/0"
-REDIS_KEY_PREFIX = "mineworker"      # 所有 key 的前缀
+REDIS_KEY_PREFIX = "netspy"      # 所有 key 的前缀
 DEDUP_FILTER = "redis"               # redis（布隆）| redis-set（精确）
 # ⚠️ **别用默认的 memory / lite**：那是**进程内**去重，每个节点各有一份指纹、
 # 互相不知道。实测两节点、两个入口页都链到同一页面：memory 下那页被抓 2 次、
@@ -297,12 +297,12 @@ SPIDER_STARTUP_GRACE = 10.0   # 秒；0 = 关闭
 没用 `RUN_ID` 的老部署，删掉种子锁和队列：
 
 ```bash
-redis-cli DEL mineworker:NewsSpider:lock:seed mineworker:NewsSpider:z_requests
-redis-cli DEL mineworker:NewsSpider:dedup:bloom \
-  mineworker:NewsSpider:dedup:bloom:1 \
-  mineworker:NewsSpider:dedup:bloom:2 \
-  mineworker:NewsSpider:dedup:bloom:3 \
-  mineworker:NewsSpider:dedup:bloom:count      # 顺便清去重（含各分层与计数）
+redis-cli DEL netspy:NewsSpider:lock:seed netspy:NewsSpider:z_requests
+redis-cli DEL netspy:NewsSpider:dedup:bloom \
+  netspy:NewsSpider:dedup:bloom:1 \
+  netspy:NewsSpider:dedup:bloom:2 \
+  netspy:NewsSpider:dedup:bloom:3 \
+  netspy:NewsSpider:dedup:bloom:count      # 顺便清去重（含各分层与计数）
 ```
 
 ---
@@ -314,7 +314,7 @@ redis-cli DEL mineworker:NewsSpider:dedup:bloom \
 （默认 Redis list）拉一批任务，对每个任务调 `task_requests(task)` 生成请求。
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class ProductSpider(mw.TaskSpider):

@@ -1,23 +1,24 @@
-# MineWorker
+# Netspy
 
-[![PyPI](https://img.shields.io/pypi/v/mineworker)](https://pypi.org/project/mineworker/)
-[![Python](https://img.shields.io/pypi/pyversions/mineworker)](https://pypi.org/project/mineworker/)
-[![CI](https://github.com/apersonw/mineworker/actions/workflows/ci.yml/badge.svg)](https://github.com/apersonw/mineworker/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/netspy)](https://pypi.org/project/netspy/)
+[![Python](https://img.shields.io/pypi/pyversions/netspy)](https://pypi.org/project/netspy/)
+[![CI](https://github.com/apersonw/netspy/actions/workflows/ci.yml/badge.svg)](https://github.com/apersonw/netspy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-apersonw.github.io-teal)](https://apersonw.github.io/mineworker/)
+[![Docs](https://img.shields.io/badge/docs-apersonw.github.io-teal)](https://apersonw.github.io/netspy/)
 
-一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
+一个上手简单、结构清晰的 Python 爬虫框架：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> **0.15.0** —— 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
-> 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/mineworker/anti-bot/)。
-> 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/mineworker/roadmap/)。
+> 前身是 MineWorker（同一套代码更名而来）——单机（`AirSpider`）到分布式
+> （`Spider` / `TaskSpider` / `BatchSpider`）全部可用，并支持
+> [浏览器 TLS 指纹伪装](https://apersonw.github.io/netspy/anti-bot/)。
+> 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/netspy/roadmap/)。
 
 ## 安装
 
 ```bash
-pip install mineworker            # 核心
-pip install "mineworker[all]"     # 含渲染 / 各类存储 / Redis / CLI / 指标 / 指纹伪装
+pip install netspy            # 核心
+pip install "netspy[all]"     # 含渲染 / 各类存储 / Redis / CLI / 指标 / 指纹伪装
 ```
 
 也可以按需装单项：`render` · `mongo` · `mysql` · `postgres` · `elasticsearch` · `kafka` ·
@@ -26,15 +27,15 @@ pip install "mineworker[all]"     # 含渲染 / 各类存储 / Redis / CLI / 指
 ## 快速开始
 
 ```bash
-pip install "mineworker[cli]"
-mineworker create -p news_crawler
+pip install "netspy[cli]"
+netspy create -p news_crawler
 cd news_crawler && python main.py
 ```
 
 或直接写：
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class NewsSpider(mw.AirSpider):
@@ -59,10 +60,8 @@ python examples/books_toscrape.py   # 两级抓取：列表页翻页 → 详情�
 
 ## 文档
 
-完整文档：**<https://apersonw.github.io/mineworker/>**
-（本地预览：`pip install "mineworker[docs]" && mkdocs serve`）
-
-设计与实施计划见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
+完整文档：**<https://apersonw.github.io/netspy/>**
+（本地预览：`pip install "netspy[docs]" && mkdocs serve`）
 
 ## 能力一览
 
@@ -80,12 +79,12 @@ python examples/books_toscrape.py   # 两级抓取：列表页翻页 → 详情�
 | 扩展 | 下载中间件链、**代理池 / 账号池**（耗尽时不会悄悄降级成直连或匿名）、掉登录自动换号 |
 | 观测 | Prometheus exporter、卡死/失败率告警（**飞书 / 钉钉 / 企业微信 / 邮件**，发送失败会记录）、`debug=True` |
 | 开发体验 | **响应缓存**（重跑读本地文件，不再反复打目标站） |
-| 工具 | `mineworker create/shell/retry/cache`，`create -i --table` 读表结构反射生成 Item |
+| 工具 | `netspy create/shell/retry/cache`，`create -i --table` 读表结构反射生成 Item |
 
 ## 开发
 
 ```bash
-conda env create -f environment.yml && conda activate mineworker
+conda env create -f environment.yml && conda activate netspy
 pre-commit install
 pytest && ruff check . && mypy
 ```

@@ -6,11 +6,11 @@ from typing import Any
 import fakeredis
 import pytest
 
-from mineworker import Request, setting
-from mineworker.core.task_queue import RedisTaskQueue
-from mineworker.db import redisdb
-from mineworker.dedup import Dedup, get_request_filter
-from mineworker.dedup.redis_filter import RedisBloomFilter, RedisSetFilter
+from netspy import Request, setting
+from netspy.core.task_queue import RedisTaskQueue
+from netspy.db import redisdb
+from netspy.dedup import Dedup, get_request_filter
+from netspy.dedup.redis_filter import RedisBloomFilter, RedisSetFilter
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_dedup_facade_redis_set(rds: Any, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_dedup_unknown_still_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    from mineworker.exceptions import ConfigError
+    from netspy.exceptions import ConfigError
 
     monkeypatch.setattr(setting, "DEDUP_FILTER", "bogus")
     with pytest.raises(ConfigError):
@@ -157,9 +157,9 @@ def test_queue_without_lease_does_not_need_lua(monkeypatch) -> None:
     """
     import fakeredis  # 这个夹具里的 fakeredis 没装 lupa，正好当「不支持 Lua」用
 
-    from mineworker import setting
-    from mineworker.core.task_queue import RedisTaskQueue
-    from mineworker.network.request import Request
+    from netspy import setting
+    from netspy.core.task_queue import RedisTaskQueue
+    from netspy.network.request import Request
 
     monkeypatch.setattr(setting, "SPIDER_TASK_LEASE", 0.0)
     client = fakeredis.FakeRedis(decode_responses=True)

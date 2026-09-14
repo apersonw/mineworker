@@ -20,14 +20,14 @@ from typing import Any
 
 import pytest
 
-from mineworker.buffer.item_buffer import ItemBuffer
-from mineworker.core import context
-from mineworker.core.batch_store import MemoryBatchStore
-from mineworker.core.spiders.batch_spider import BatchSpider
-from mineworker.dedup import Dedup
-from mineworker.network.request import Request
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils.stats import Stats
+from netspy.buffer.item_buffer import ItemBuffer
+from netspy.core import context
+from netspy.core.batch_store import MemoryBatchStore
+from netspy.core.spiders.batch_spider import BatchSpider
+from netspy.dedup import Dedup
+from netspy.network.request import Request
+from netspy.pipelines.base import BasePipeline
+from netspy.utils.stats import Stats
 
 
 class _Pipeline(BasePipeline):
@@ -54,7 +54,7 @@ def _spider(store: Any) -> Any:
 @pytest.fixture(autouse=True)
 def _reset(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
     _Pipeline.rows = []
-    from mineworker import setting
+    from netspy import setting
 
     monkeypatch.setattr(setting, "ITEM_FILTER_ENABLE", False)
     # 别把 dump 写进仓库根目录
@@ -131,7 +131,7 @@ def test_dumped_write_still_marks_the_task_done() -> None:
 
     代价是批次报告完成时，有 N 行躺在 dump 文件里而不是库里 ——
     换来的是不必为「库抖了一下」把整页重抓一遍。框架会记 error，
-    `mineworker retry --items` 可回放。
+    `netspy retry --items` 可回放。
     """
     store = MemoryBatchStore([{"id": 1}])
     store.claim_tasks(1)
@@ -155,9 +155,9 @@ def test_worker_actually_sets_the_context() -> None:
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.utils import log
 
     class _T(BaseHTTPRequestHandler):
         def log_message(self, *a: Any) -> None:

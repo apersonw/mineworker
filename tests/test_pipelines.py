@@ -6,10 +6,10 @@ from pathlib import Path
 import mongomock
 import pytest
 
-from mineworker.pipelines.base import BasePipeline
-from mineworker.pipelines.console import ConsolePipeline
-from mineworker.pipelines.csv import CsvPipeline
-from mineworker.pipelines.mongo import MongoPipeline
+from netspy.pipelines.base import BasePipeline
+from netspy.pipelines.console import ConsolePipeline
+from netspy.pipelines.csv import CsvPipeline
+from netspy.pipelines.mongo import MongoPipeline
 
 
 def test_base_update_items_not_implemented_by_default() -> None:

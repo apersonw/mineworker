@@ -20,9 +20,9 @@ from typing import Any
 import fakeredis
 import pytest
 
-from mineworker import setting
-from mineworker.core.task_queue import RedisTaskQueue
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.core.task_queue import RedisTaskQueue
+from netspy.network.request import Request
 
 LEASE = 0.4
 
@@ -120,7 +120,7 @@ def _boom(*_a: object, **_k: object) -> None:
 # ---- 续期要覆盖「正在处理的」，不只是缓冲区里的 ----------------------
 def test_collector_reports_both_buffered_and_in_progress(client: Any) -> None:
     """正在被处理的任务恰恰是耗时最长、最容易超时的那批，必须一起续。"""
-    from mineworker.core.collector import Collector
+    from netspy.core.collector import Collector
 
     queue = _filled(client, "held", 4)
     collector = Collector(queue)

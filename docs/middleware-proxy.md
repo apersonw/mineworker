@@ -5,7 +5,7 @@
 在下载前后统一处理所有请求（加签名、换 Cookie、统计等）。
 
 ```python
-from mineworker.network.middleware import DownloaderMiddleware
+from netspy.network.middleware import DownloaderMiddleware
 
 
 class SignMiddleware(DownloaderMiddleware):
@@ -48,7 +48,7 @@ PROXY_ALLOW_DIRECT = False     # True 才允许「没代理就直连」
     池空时先等 `PROXY_WAIT_TIMEOUT`（默认 30 秒）并按 `PROXY_MIN_INTERVAL`
     的节奏重新取号；仍拿不到才抛 `ProxyUnavailableError`。
     该请求走正常重试，重试用尽后落到 `failed_requests.jsonl`。
-    `mineworker retry --requests` 只是**探活**（重新下载看状态码，不跑回调、不入库）；要把数据真正抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫。
+    `netspy retry --requests` 只是**探活**（重新下载看状态码，不跑回调、不入库）；要把数据真正抓回来，开 `RETRY_FAILED_ON_START` 重跑一次爬虫。
 
     这个错误**不计入熔断** —— 代理供应是自己这边的问题，
     算进去的话代理商断供五分钟就能把所有域全熔断一遍。
@@ -60,7 +60,7 @@ PROXY_ALLOW_DIRECT = False     # True 才允许「没代理就直连」
     21 个请求里有 16 个从本机 IP 打到了靶子，没有任何提示。
 池空时（且距上次拉取超过 `PROXY_MIN_INTERVAL`）重新拉取。
 
-自定义代理池：继承 `mineworker.network.proxy_pool.base.ProxyPool`，实现 `get_proxy()`，
+自定义代理池：继承 `netspy.network.proxy_pool.base.ProxyPool`，实现 `get_proxy()`，
 然后 `PROXY_POOL = "myproj.MyProxyPool"`。另外三个是**可选**钩子，不实现也不会出错：
 
 | 钩子 | 什么时候被调 |

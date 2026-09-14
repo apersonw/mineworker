@@ -24,9 +24,9 @@ from http.cookiejar import CookieJar
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._common import shard_count, shard_index
-from mineworker.network.downloader._httpx import HttpxDownloader
+from netspy import setting
+from netspy.network.downloader._common import shard_count, shard_index
+from netspy.network.downloader._httpx import HttpxDownloader
 
 
 def test_shard_count_follows_thread_count(monkeypatch: pytest.MonkeyPatch) -> None:

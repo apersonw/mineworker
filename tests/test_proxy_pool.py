@@ -4,11 +4,11 @@ import httpx
 import pytest
 import respx
 
-from mineworker import Request, RequestError, setting
-from mineworker.network.downloader import close_default_downloaders
-from mineworker.network.downloader._httpx import HttpxDownloader
-from mineworker.network.proxy_pool import ProxyPool, close_proxy_pool, get_proxy_pool
-from mineworker.network.proxy_pool.api import ApiProxyPool
+from netspy import Request, RequestError, setting
+from netspy.network.downloader import close_default_downloaders
+from netspy.network.downloader._httpx import HttpxDownloader
+from netspy.network.proxy_pool import ProxyPool, close_proxy_pool, get_proxy_pool
+from netspy.network.proxy_pool.api import ApiProxyPool
 
 
 @pytest.fixture(autouse=True)
@@ -102,7 +102,7 @@ class _SpyPool(ProxyPool):
 @respx.mock
 def test_downloader_uses_pool_and_reports_bad(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _SpyPool()
-    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: spy)
+    monkeypatch.setattr("netspy.network.downloader._common.get_proxy_pool", lambda: spy)
     respx.get("https://x.test/").mock(side_effect=httpx.ConnectError("boom"))
     with pytest.raises(RequestError):
         HttpxDownloader().download(Request("https://x.test/"))
@@ -113,7 +113,7 @@ def test_downloader_uses_pool_and_reports_bad(monkeypatch: pytest.MonkeyPatch) -
 @respx.mock
 def test_explicit_request_proxy_skips_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _SpyPool()
-    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: spy)
+    monkeypatch.setattr("netspy.network.downloader._common.get_proxy_pool", lambda: spy)
     monkeypatch.setattr(setting, "RANDOM_USER_AGENT", False)
     respx.get("https://x.test/").mock(return_value=httpx.Response(200, text="ok"))
     resp = HttpxDownloader().download(Request("https://x.test/", proxy="http://explicit:9"))

@@ -24,9 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from server import BenchServer
 
-import mineworker as mw
-from mineworker import setting
-from mineworker.network.downloader import close_default_downloaders
+import netspy as mw
+from netspy import setting
+from netspy.network.downloader import close_default_downloaders
 
 
 def _rss_mb() -> float:
@@ -116,12 +116,12 @@ def _run_once(
     setting.RANDOM_USER_AGENT = False
     setting.ITEM_FILTER_ENABLE = False
     setting.LOG_LEVEL = "ERROR"
-    # 基准工具**自己占用 stdout** 打表格；框架结束时那行 MINEWORKER_RUN_SUMMARY
+    # 基准工具**自己占用 stdout** 打表格；框架结束时那行 NETSPY_RUN_SUMMARY
     # 是给编排层读容器日志用的，在这里只会混进表里 —— 关掉
     setting.RUN_SUMMARY_ENABLE = False
     setting.METRICS_ENABLE = False
     setting.WARNING_ENABLE = False
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
 
@@ -232,7 +232,7 @@ def main() -> None:
         rounds, n = args.rounds, args.requests
 
     print(
-        f"# MineWorker 吞吐画像\n\n共 {len(grid)} 格 × {rounds} 轮 × {n} 请求"
+        f"# Netspy 吞吐画像\n\n共 {len(grid)} 格 × {rounds} 轮 × {n} 请求"
         f"　（Python {sys.version_info.major}.{sys.version_info.minor}, {sys.platform}, "
         f"CPU {os.cpu_count()}）\n"
     )

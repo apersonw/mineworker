@@ -1,6 +1,6 @@
 """运行作用域（RUN_ID）：同一个爬虫**重跑**时到底是「续上次」还是「从头来」。
 
-**生产上撞到的**（MineWorkerHub，2026-09-11 → 09-13）：一个 2 节点的分布式任务
+**生产上撞到的**（NetspyHub，2026-09-11 → 09-13）：一个 2 节点的分布式任务
 每 5 分钟定时跑一次，49 小时里 1160 个实例有 **1158 个「请求成功 0，入库 0 条」**，
 全部 exit 0、全部被平台记成 success。只有第一轮真干了活。
 
@@ -25,12 +25,12 @@ import fakeredis
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import Item, Request, Spider, setting
-from mineworker.core import redis_scheduler
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils import log
+from netspy import Item, Request, Spider, setting
+from netspy.core import redis_scheduler
+from netspy.pipelines.base import BasePipeline
+from netspy.utils import log
 
-NS = "mineworker"
+NS = "netspy"
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
     # 去重 / Item 去重走的是各自模块里的 get_redis，也要指到同一个假实例
-    from mineworker.dedup import redis_filter
+    from netspy.dedup import redis_filter
 
     monkeypatch.setattr(redis_filter, "_default_redis", lambda: client)
     yield client

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mineworker import Request
+from netspy import Request
 
 
 def test_defaults() -> None:

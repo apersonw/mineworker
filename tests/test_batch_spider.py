@@ -11,18 +11,18 @@ import fakeredis
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import BatchSpider, Request, setting
-from mineworker.core import redis_scheduler
-from mineworker.core.batch_monitor import BatchMonitor
-from mineworker.core.batch_store import DONE, FAILED, MemoryBatchStore, MysqlBatchStore
-from mineworker.exceptions import SpiderError
+from netspy import BatchSpider, Request, setting
+from netspy.core import redis_scheduler
+from netspy.core.batch_monitor import BatchMonitor
+from netspy.core.batch_store import DONE, FAILED, MemoryBatchStore, MysqlBatchStore
+from netspy.exceptions import SpiderError
 
 
 @pytest.fixture(autouse=True)
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
-    monkeypatch.setattr("mineworker.db.redisdb.get_redis", lambda url=None: client)
+    monkeypatch.setattr("netspy.db.redisdb.get_redis", lambda url=None: client)
     yield client
     client.flushall()
 
@@ -121,11 +121,11 @@ def _drain_worker(
 def test_monitor_run_once_completes_batch(fake_redis: Any) -> None:
     store = MemoryBatchStore([{"id": i} for i in range(4)])
     mon = BatchMonitor(
-        store=store, redis=fake_redis, ns="mineworker:M", batch_interval=1, monitor_interval=0.01
+        store=store, redis=fake_redis, ns="netspy:M", batch_interval=1, monitor_interval=0.01
     )
     worker = threading.Thread(
         target=_drain_worker,
-        args=(fake_redis, "mineworker:M:batch_pending", store),
+        args=(fake_redis, "netspy:M:batch_pending", store),
         kwargs={"until": 4, "retry_ids": set()},
     )
     worker.start()
@@ -134,7 +134,7 @@ def test_monitor_run_once_completes_batch(fake_redis: Any) -> None:
 
     assert batch.is_done and batch.done_count == 4
     assert store.count_tasks().done == 4
-    assert fake_redis.get("mineworker:M:batch_done") == "1"
+    assert fake_redis.get("netspy:M:batch_done") == "1"
 
 
 def test_monitor_reprocesses_lost_task(fake_redis: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,14 +143,14 @@ def test_monitor_reprocesses_lost_task(fake_redis: Any, monkeypatch: pytest.Monk
     mon = BatchMonitor(
         store=store,
         redis=fake_redis,
-        ns="mineworker:L",
+        ns="netspy:L",
         batch_interval=1,
         monitor_interval=0.02,
         lost_stale=0.02,
     )
     worker = threading.Thread(
         target=_drain_worker,
-        args=(fake_redis, "mineworker:L:batch_pending", store),
+        args=(fake_redis, "netspy:L:batch_pending", store),
         kwargs={"until": 2, "retry_ids": {2}},  # 任务 2 第一次「崩溃」
     )
     worker.start()
@@ -163,7 +163,7 @@ def test_monitor_reprocesses_lost_task(fake_redis: Any, monkeypatch: pytest.Monk
 
 def test_monitor_empty_task_table_finishes_immediately(fake_redis: Any) -> None:
     mon = BatchMonitor(
-        store=MemoryBatchStore([]), redis=fake_redis, ns="mineworker:Z", batch_interval=1
+        store=MemoryBatchStore([]), redis=fake_redis, ns="netspy:Z", batch_interval=1
     )
     batch = mon.run_once()
     assert batch.is_done
@@ -173,7 +173,7 @@ def test_monitor_lock_blocks_second_master(fake_redis: Any) -> None:
     store = MemoryBatchStore([{"id": 1}])
 
     def make() -> BatchMonitor:
-        return BatchMonitor(store=store, redis=fake_redis, ns="mineworker:LK", batch_interval=1)
+        return BatchMonitor(store=store, redis=fake_redis, ns="netspy:LK", batch_interval=1)
 
     guard = make()._hold_lock()
     with pytest.raises(SpiderError, match="monitor 在运行"):
@@ -187,7 +187,7 @@ def test_monitor_new_batch_waits_for_interval(fake_redis: Any) -> None:
     batch = store.create_batch("old", 1, interval=7.0, unit="day")
     store.finish_batch(batch.id)
     mon = BatchMonitor(
-        store=store, redis=fake_redis, ns="mineworker:W", batch_interval=7, interval_unit="day"
+        store=store, redis=fake_redis, ns="netspy:W", batch_interval=7, interval_unit="day"
     )
     # 上一批刚结束、远没到 7 天 → 不开新批次
     assert mon._ensure_batch(force=False) is None
@@ -234,7 +234,7 @@ def test_batch_end_to_end(httpserver: HTTPServer, fake_redis: Any) -> None:
     assert store.count_tasks().done == 3
     latest = store.latest_batch()
     assert latest is not None and latest.is_done and latest.done_count == 3
-    assert fake_redis.get("mineworker:E2E:batch_done") == "1"
+    assert fake_redis.get("netspy:E2E:batch_done") == "1"
 
 
 def test_failed_request_marks_task_failed(httpserver: HTTPServer, fake_redis: Any) -> None:
@@ -403,17 +403,17 @@ def test_renew_does_not_steal_back_an_expired_lock(fake_redis: Any) -> None:
     释放路径本来就校验了持有者（`__exit__` 里的 `get == node_id`），
     续期这边漏了 —— 同一份代码里的两半，一半对一半不对。
     """
-    from mineworker.core.batch_monitor import BatchMonitor
+    from netspy.core.batch_monitor import BatchMonitor
 
     monitor = BatchMonitor(
         store=MemoryBatchStore([{"id": 1}]),
         redis=fake_redis,
-        ns="mineworker:LOCK",
+        ns="netspy:LOCK",
         batch_interval=1.0,
         push_limit=10,
         monitor_interval=0.01,
     )
-    key = "mineworker:LOCK:batch_monitor_lock"
+    key = "netspy:LOCK:batch_monitor_lock"
 
     fake_redis.set(key, "master-B", ex=60)  # B 是当前合法持有者
 
@@ -425,17 +425,17 @@ def test_renew_does_not_steal_back_an_expired_lock(fake_redis: Any) -> None:
 
 
 def test_renew_keeps_the_lock_when_we_still_hold_it(fake_redis: Any) -> None:
-    from mineworker.core.batch_monitor import BatchMonitor
+    from netspy.core.batch_monitor import BatchMonitor
 
     monitor = BatchMonitor(
         store=MemoryBatchStore([{"id": 1}]),
         redis=fake_redis,
-        ns="mineworker:LOCK2",
+        ns="netspy:LOCK2",
         batch_interval=1.0,
         push_limit=10,
         monitor_interval=0.01,
     )
-    key = "mineworker:LOCK2:batch_monitor_lock"
+    key = "netspy:LOCK2:batch_monitor_lock"
     fake_redis.set(key, monitor._node_id, ex=1)
 
     monitor._renew_lock()

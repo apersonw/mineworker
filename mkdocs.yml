@@ -1,8 +1,8 @@
-site_name: MineWorker
+site_name: Netspy
 site_description: 一个上手简单、结构清晰的 Python 爬虫框架
-site_url: https://apersonw.github.io/mineworker/
-repo_url: https://github.com/apersonw/mineworker
-repo_name: apersonw/mineworker
+site_url: https://apersonw.github.io/netspy/
+repo_url: https://github.com/apersonw/netspy
+repo_name: apersonw/netspy
 docs_dir: docs
 
 theme:

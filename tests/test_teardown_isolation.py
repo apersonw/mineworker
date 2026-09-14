@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 
-from mineworker.core import base_scheduler as bs
-from mineworker.core.base_scheduler import BaseScheduler
+from netspy.core import base_scheduler as bs
+from netspy.core.base_scheduler import BaseScheduler
 
 
 class _Buffer:

@@ -8,8 +8,8 @@ import pytest
 from pytest_httpserver import HTTPServer
 
 from conn_counting_server import ConnCountingServer
-from mineworker import Request
-from mineworker.network.downloader import close_default_downloaders
+from netspy import Request
+from netspy.network.downloader import close_default_downloaders
 
 
 @pytest.fixture(autouse=True)

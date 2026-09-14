@@ -19,12 +19,12 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.core.parser_control import ParserWorker
-from mineworker.network.request import Request
-from mineworker.network.response import Response
-from mineworker.utils import stats as sk
-from mineworker.utils.stats import Stats
+from netspy import setting
+from netspy.core.parser_control import ParserWorker
+from netspy.network.request import Request
+from netspy.network.response import Response
+from netspy.utils import stats as sk
+from netspy.utils.stats import Stats
 
 
 class _Buffer:
@@ -44,7 +44,7 @@ class _Sink:
 
 
 def _worker(buffer: _Buffer, stats: Stats, sink: _Sink) -> Any:
-    from mineworker.core.base_parser import BaseParser
+    from netspy.core.base_parser import BaseParser
 
     worker = ParserWorker.__new__(ParserWorker)
     worker._parser = BaseParser()

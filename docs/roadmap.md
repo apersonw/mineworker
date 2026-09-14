@@ -1,7 +1,11 @@
 # Roadmap
 
-> 当前发行版本 **0.23.0**。变更明细见
-> [CHANGELOG](https://github.com/apersonw/mineworker/blob/main/CHANGELOG.md)。
+> 项目已从 **MineWorker** 更名为 **Netspy**（PyPI 旧包 `mineworker` 停在 0.23.0 不再更新，
+> 新包 `netspy` 从 **0.1.0** 重新起版本号——同一套代码，只是换了个名字和 PyPI 项目）。
+> 下面「已完成」小节里出现的 `mineworker` / `MineWorker` / `MineWorkerHub` /
+> `mineworker create` 这类字样，都是改名前各版本的历史原文，**不做回溯改写**——
+> 就像不会去改写已经发过的 git 提交信息一样。改名前的完整版本历史见
+> [CHANGELOG](https://github.com/apersonw/netspy/blob/main/CHANGELOG.md)。
 >
 > 下面到 v4.30 为止的「计划中」小节，**列出的每一项早就已经带着 ✅ 完成了**
 > ——只是这行版本号和小节标题当时没跟着改，一直没人发现，具体落在哪个

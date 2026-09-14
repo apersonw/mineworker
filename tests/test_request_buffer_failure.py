@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from mineworker.buffer.request_buffer import RequestBuffer
-from mineworker.network.request import Request
-from mineworker.utils.stats import Stats
+from netspy.buffer.request_buffer import RequestBuffer
+from netspy.network.request import Request
+from netspy.utils.stats import Stats
 
 
 class FlakyQueue:

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from mineworker import setting
-from mineworker.utils import log
+from netspy import setting
+from netspy.utils import log
 
 
 def test_get_logger_is_usable() -> None:
@@ -37,7 +37,7 @@ def test_level_filters_lower_messages(tmp_path: Path, monkeypatch: pytest.Monkey
 # ======================================================================
 # LoggerMixin —— 混入它就有 self.logger，不用自己 import / get_logger。
 #
-# 没有它之前，写一个爬虫想打日志得自己 `from mineworker.utils.log import
+# 没有它之前，写一个爬虫想打日志得自己 `from netspy.utils.log import
 # get_logger` 再手动 bind 一个名字，还常常图省事直接开在模块级（一个全局
 # 变量，和具体类没绑定关系）。这里既测 mixin 本身，也逐个测四个真正混入了
 # 它的基类——用户实际写的是这四个的子类，只在 mixin 层面测不出「忘了往
@@ -84,7 +84,7 @@ def test_logger_mixin_distinguishes_different_classes(
 
 def test_base_parser_subclasses_get_logger_with_zero_setup() -> None:
     """写一个爬虫，`self.logger` 直接能用——不用覆写 `__init__`，不用 import。"""
-    from mineworker.core.base_parser import BaseParser
+    from netspy.core.base_parser import BaseParser
 
     class DemoSpider(BaseParser):
         pass
@@ -93,7 +93,7 @@ def test_base_parser_subclasses_get_logger_with_zero_setup() -> None:
 
 
 def test_base_pipeline_subclasses_get_logger_with_zero_setup() -> None:
-    from mineworker.pipelines.base import BasePipeline
+    from netspy.pipelines.base import BasePipeline
 
     class DemoPipeline(BasePipeline):
         def save_items(self, table: str, items: list[dict[str, object]]) -> bool:
@@ -104,7 +104,7 @@ def test_base_pipeline_subclasses_get_logger_with_zero_setup() -> None:
 
 
 def test_downloader_middleware_subclasses_get_logger_with_zero_setup() -> None:
-    from mineworker.network.middleware import DownloaderMiddleware
+    from netspy.network.middleware import DownloaderMiddleware
 
     class DemoMiddleware(DownloaderMiddleware):
         pass
@@ -113,7 +113,7 @@ def test_downloader_middleware_subclasses_get_logger_with_zero_setup() -> None:
 
 
 def test_user_pool_subclasses_get_logger_with_zero_setup() -> None:
-    from mineworker.network.user_pool.base import User, UserPool
+    from netspy.network.user_pool.base import User, UserPool
 
     class DemoPool(UserPool):
         def get(self) -> User | None:

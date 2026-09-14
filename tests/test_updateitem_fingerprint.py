@@ -21,11 +21,11 @@ from typing import Any
 
 import pytest
 
-from mineworker import Item, UpdateItem, setting
-from mineworker.buffer.item_buffer import ItemBuffer
-from mineworker.dedup import Dedup
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils.stats import Stats
+from netspy import Item, UpdateItem, setting
+from netspy.buffer.item_buffer import ItemBuffer
+from netspy.dedup import Dedup
+from netspy.pipelines.base import BasePipeline
+from netspy.utils.stats import Stats
 
 
 class _Pipe(BasePipeline):

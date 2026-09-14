@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._common import set_effective_concurrency
-from mineworker.utils import log
+from netspy import setting
+from netspy.network.downloader._common import set_effective_concurrency
+from netspy.utils import log
 
 
 @pytest.fixture(autouse=True)
@@ -33,8 +33,8 @@ def _reset_state() -> Iterator[None]:
 # ----------------------------------------------------------------------
 # 真实数据库集成测试用的夹具。没配环境变量就 skip —— 本地默认不拖慢，CI 里必跑。
 #
-#   MINEWORKER_TEST_POSTGRES_URL=postgresql://postgres:x@127.0.0.1:5432/postgres
-#   MINEWORKER_TEST_MYSQL_URL=mysql://root:x@127.0.0.1:3306/mineworker
+#   NETSPY_TEST_POSTGRES_URL=postgresql://postgres:x@127.0.0.1:5432/postgres
+#   NETSPY_TEST_MYSQL_URL=mysql://root:x@127.0.0.1:3306/netspy
 # ----------------------------------------------------------------------
 def _db_url(env: str) -> str:
     url = os.environ.get(env, "").strip()
@@ -45,9 +45,9 @@ def _db_url(env: str) -> str:
 
 @pytest.fixture
 def postgres_db() -> Iterator[Any]:
-    from mineworker.db.postgresdb import PostgresDB
+    from netspy.db.postgresdb import PostgresDB
 
-    db = PostgresDB.from_url(_db_url("MINEWORKER_TEST_POSTGRES_URL"))
+    db = PostgresDB.from_url(_db_url("NETSPY_TEST_POSTGRES_URL"))
     try:
         yield db
     finally:
@@ -61,7 +61,7 @@ def redis_url() -> str:
     分布式能力此前只用 fakeredis + 单进程测过 —— 那既不含真正的并发竞争，
     也不跨进程。这个夹具让集成测试连真实例。
     """
-    return _db_url("MINEWORKER_TEST_REDIS_URL")
+    return _db_url("NETSPY_TEST_REDIS_URL")
 
 
 @pytest.fixture
@@ -71,14 +71,14 @@ def mysql_url() -> str:
     并发用例需要**每个 worker 一条独立连接** —— 共用一个 `MysqlDB` 实例
     就没有真正的并发可言，也就测不出认领的竞态。
     """
-    return _db_url("MINEWORKER_TEST_MYSQL_URL")
+    return _db_url("NETSPY_TEST_MYSQL_URL")
 
 
 @pytest.fixture
 def mysql_db() -> Iterator[Any]:
-    from mineworker.db.mysqldb import MysqlDB
+    from netspy.db.mysqldb import MysqlDB
 
-    db = MysqlDB.from_url(_db_url("MINEWORKER_TEST_MYSQL_URL"))
+    db = MysqlDB.from_url(_db_url("NETSPY_TEST_MYSQL_URL"))
     try:
         yield db
     finally:

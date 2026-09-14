@@ -8,7 +8,7 @@ import fakeredis
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import (
+from netspy import (
     AirSpider,
     GuestUserPool,
     LocalUserPool,
@@ -18,7 +18,7 @@ from mineworker import (
     User,
     setting,
 )
-from mineworker.network.user_pool.middleware import UserPoolMiddleware
+from netspy.network.user_pool.middleware import UserPoolMiddleware
 
 
 # ---------------------------------------------------------------- LocalUserPool

@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.pipelines.postgres import PostgresPipeline
+from netspy import setting
+from netspy.pipelines.postgres import PostgresPipeline
 
 
 class FakeDB:

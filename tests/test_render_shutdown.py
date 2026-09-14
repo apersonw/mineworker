@@ -19,10 +19,10 @@ from typing import Any
 
 import pytest
 
-from mineworker.exceptions import RequestError
-from mineworker.network.downloader import _playwright as pw
-from mineworker.network.request import Request
-from mineworker.network.response import Response
+from netspy.exceptions import RequestError
+from netspy.network.downloader import _playwright as pw
+from netspy.network.request import Request
+from netspy.network.response import Response
 
 _CFG = {"pool_size": 1, "timeout": 5, "headless": True}
 

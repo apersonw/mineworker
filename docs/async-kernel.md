@@ -36,7 +36,7 @@ _RenderPool       pool_size×线程，各持一个 sync chromium
 
 几乎是整个 core + network + dedup + 一半测试：`base_scheduler`（TaskGroup / `asyncio.Queue` /
 信号）、`parser_control`、`collector`、两个 buffer、`task_queue`、`_httpx`、`downloader/base`
-（连带 `Request.download()` 和 `mineworker shell` 的同步入口）、`redis_scheduler` /
+（连带 `Request.download()` 和 `netspy shell` 的同步入口）、`redis_scheduler` /
 `redis_task_scheduler` / `redis_filter`、`proxy_pool`、`user_pool/redis`，以及
 `test_air_spider` / `test_spider` / `test_task_spider` / `test_integration_httpserver` /
 `test_downloader` / `test_render` / `test_spider_persistence` 全部重写（现有测试深度依赖
@@ -79,7 +79,7 @@ HTTPX_HTTP2 = True                  # 需 pip install "httpx[http2]"，同步 / 
 
 ## 实测（2026-09）
 
-上面「何时重新评估」的条件触发了 —— 于是建了 [`benchmarks/`](https://github.com/apersonw/mineworker/tree/main/benchmarks)
+上面「何时重新评估」的条件触发了 —— 于是建了 [`benchmarks/`](https://github.com/apersonw/netspy/tree/main/benchmarks)
 去拿数据。**结果推翻了这一页原本的几处推断。**
 
 靶子是本地 asyncio 服务（自检可扛 512 并发 / 7,300 QPS，远高于被测），
@@ -120,7 +120,7 @@ QPS 用服务端计时，并发取**时间加权平均**而非峰值。
     评估当时它在 `setting.py` 里有定义、文档里写着「复用 httpx 连接」，
     但**框架代码从没读过它** —— 只有 `Request(use_session=True)` 生效，
     在配置里写 `USE_SESSION = True` 得到的是静默无效果。
-    现已修复，见 `mineworker/network/downloader/__init__.py` 的 `_wants_session`。
+    现已修复，见 `netspy/network/downloader/__init__.py` 的 `_wants_session`。
 
 ### 3. 线程越多越慢
 

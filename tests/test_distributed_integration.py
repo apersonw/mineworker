@@ -123,9 +123,9 @@ def _run_node(
     子进程不需要 monkeypatch —— get_redis() 读 setting.REDIS_URL，
     配上它就会连真 Redis，这正是生产里的真实路径。
     """
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.utils import log
 
     setting.REDIS_URL = redis_url
     setting.RUN_ID = run_id
@@ -258,7 +258,7 @@ def test_graceful_stop_returns_tasks_to_redis(
 
     实测那次：24 个任务里 SIGTERM 丢了 20 个，SIGINT 全数恢复。
     而 SIGTERM 正是 docker stop / K8s 驱逐 / systemctl stop 发的信号 ——
-    MineWorkerHub 停任务用的也是它。
+    NetspyHub 停任务用的也是它。
     """
     with mp.Manager() as mgr:
         hits = mgr.list()
@@ -301,7 +301,7 @@ def test_heartbeat_visible_across_processes(httpserver: HTTPServer, clean_redis:
         seen_nodes = 0
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline and seen_nodes < 2:
-            seen_nodes = max(seen_nodes, client.hlen(f"mineworker:{key}:heartbeat") or 0)
+            seen_nodes = max(seen_nodes, client.hlen(f"netspy:{key}:heartbeat") or 0)
             time.sleep(0.2)
         client.close()
         _join_all(procs)
@@ -312,8 +312,8 @@ def test_heartbeat_visible_across_processes(httpserver: HTTPServer, clean_redis:
 # ---- 全局限速：N 个节点合起来才是配置的速率 ---------------------------
 def test_global_throttle_lua_spaces_tickets(clean_redis: str, monkeypatch: Any) -> None:
     """先单独验 Lua 的取号算术，多进程测出问题时好分辨是算法还是并发。"""
-    from mineworker import setting
-    from mineworker.network import global_throttle
+    from netspy import setting
+    from netspy.network import global_throttle
 
     # 用 monkeypatch 而不是直接赋值：跑测试时 pytest-randomly 会打乱顺序，
     # 改了不还原的全局 setting 会漏到别的用例里
@@ -407,9 +407,9 @@ def _run_counting_node(
     if delay:
         _t.sleep(delay)
 
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.utils import log
 
     setting.REDIS_URL = redis_url
     setting.ITEM_PIPELINES = []
@@ -448,12 +448,12 @@ def _seed_later(redis_url: str, redis_key: str, seed_url: str, delay: float) -> 
     import time as _t
 
     _t.sleep(delay)
-    from mineworker import setting
+    from netspy import setting
 
     setting.REDIS_URL = redis_url
-    import mineworker as mw
-    from mineworker.core.task_queue import RedisTaskQueue
-    from mineworker.db.redisdb import get_redis
+    import netspy as mw
+    from netspy.core.task_queue import RedisTaskQueue
+    from netspy.db.redisdb import get_redis
 
     ns = f"{setting.REDIS_KEY_PREFIX}:{redis_key}"
     RedisTaskQueue(ns, get_redis()).put(mw.Request(seed_url, callback="parse_seed"))
@@ -473,7 +473,7 @@ def test_node_waits_when_another_is_still_seeding(httpserver: HTTPServer, clean_
     import redis as redis_lib
 
     key = f"race{os.getpid()}"
-    ns = f"mineworker:{key}"
+    ns = f"netspy:{key}"
     client = redis_lib.from_url(clean_redis, decode_responses=True)
     # 先占住种子锁：本节点将走「另一节点已注入种子，直接消费队列」那条路
     client.set(f"{ns}:lock:seed", "1", nx=True, ex=600)
@@ -536,7 +536,7 @@ def test_sigkilled_node_tasks_are_reclaimed(httpserver: HTTPServer, clean_redis:
         first.join(timeout=30)
 
         client = redis_lib.from_url(clean_redis, decode_responses=True)
-        stranded = client.zcard(f"mineworker:{key}:z_inflight")
+        stranded = client.zcard(f"netspy:{key}:z_inflight")
         assert stranded > 0, "被硬杀的节点没有留下在途任务，这个用例就没验到东西"
         # 把租约调短，让第二个节点能在测试时限内回收
         second = mp.Process(
@@ -660,10 +660,10 @@ def test_scheduled_rerun_crawls_every_time_with_run_id(
 
     client = redis_lib.from_url(clean_redis, decode_responses=True)
     try:
-        assert client.zcard("mineworker:rerun-fresh:runs") == 3
-        assert not client.exists("mineworker:rerun-fresh:lock:seed"), "作业级种子锁不该出现"
+        assert client.zcard("netspy:rerun-fresh:runs") == 3
+        assert not client.exists("netspy:rerun-fresh:lock:seed"), "作业级种子锁不该出现"
         for n in range(3):
-            assert client.exists(f"mineworker:rerun-fresh:run:r{n}:lock:seed")
-            assert client.ttl(f"mineworker:rerun-fresh:run:r{n}:lock:seed") > 0, "运行 key 没有 TTL"
+            assert client.exists(f"netspy:rerun-fresh:run:r{n}:lock:seed")
+            assert client.ttl(f"netspy:rerun-fresh:run:r{n}:lock:seed") > 0, "运行 key 没有 TTL"
     finally:
         client.close()

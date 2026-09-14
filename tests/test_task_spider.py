@@ -9,17 +9,17 @@ import fakeredis
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import Request, TaskSpider, setting
-from mineworker.core import redis_scheduler
-from mineworker.core.redis_task_scheduler import _TaskPoller
-from mineworker.core.task_source import RedisTaskSource
+from netspy import Request, TaskSpider, setting
+from netspy.core import redis_scheduler
+from netspy.core.redis_task_scheduler import _TaskPoller
+from netspy.core.task_source import RedisTaskSource
 
 
 @pytest.fixture(autouse=True)
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
-    monkeypatch.setattr("mineworker.db.redisdb.get_redis", lambda url=None: client)
+    monkeypatch.setattr("netspy.db.redisdb.get_redis", lambda url=None: client)
     yield client
     client.flushall()
 
@@ -79,7 +79,7 @@ def test_drains_tasks_then_exits(httpserver: HTTPServer, fake_redis: Any) -> Non
 
 def test_push_and_fetch_roundtrip(fake_redis: Any) -> None:
     ItemSpider.push_tasks({"id": 7}, {"id": 8})
-    key = "mineworker:ItemSpider:tasks"
+    key = "netspy:ItemSpider:tasks"
     assert fake_redis.llen(key) == 2
 
     src = RedisTaskSource(fake_redis, key)

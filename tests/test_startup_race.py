@@ -1,6 +1,6 @@
 """分布式启动竞态：节点不能在「还没人播种」时就判定抓完了。
 
-实测现象（MineWorkerHub 上两个 worker 容器同秒启动）：
+实测现象（NetspyHub 上两个 worker 容器同秒启动）：
 
     实例 11  17:12:40 启动 → 63 请求 / 60 条
     实例 12  17:12:40 启动 → 17:12:41 退出，**0 个请求**
@@ -21,11 +21,11 @@ from typing import Any
 import fakeredis
 import pytest
 
-from mineworker import setting
-from mineworker.core import redis_scheduler
-from mineworker.core.base_parser import BaseParser
-from mineworker.core.redis_scheduler import RedisScheduler
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.core import redis_scheduler
+from netspy.core.base_parser import BaseParser
+from netspy.core.redis_scheduler import RedisScheduler
+from netspy.network.request import Request
 
 
 class _Parser(BaseParser):
@@ -42,7 +42,7 @@ def scheduler(monkeypatch: pytest.MonkeyPatch) -> Iterator[RedisScheduler]:
     # 两处都要 patch：redis_scheduler 里是 `from ... import get_redis` 的早绑定名字，
     # 只改模块属性对它无效
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
-    monkeypatch.setattr("mineworker.db.redisdb.get_redis", lambda url=None: client)
+    monkeypatch.setattr("netspy.db.redisdb.get_redis", lambda url=None: client)
     monkeypatch.setattr(setting, "DEDUP_FILTER", "redis")
     yield RedisScheduler(parser=_Parser(), redis_key="RACE", keep_alive=False)
     client.flushall()
@@ -75,7 +75,7 @@ def test_grace_only_applies_before_the_node_has_seen_work(scheduler: RedisSchedu
 def test_keep_alive_still_never_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_scheduler, "get_redis", lambda url=None: client)
-    monkeypatch.setattr("mineworker.db.redisdb.get_redis", lambda url=None: client)
+    monkeypatch.setattr("netspy.db.redisdb.get_redis", lambda url=None: client)
     monkeypatch.setattr(setting, "SPIDER_STARTUP_GRACE", 0.0)
     sch = RedisScheduler(parser=_Parser(), redis_key="RACE2", keep_alive=True)
     sch.stats.incr("request_ok")

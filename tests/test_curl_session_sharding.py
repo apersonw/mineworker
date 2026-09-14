@@ -37,8 +37,8 @@ from http.cookiejar import CookieJar
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._curl import CurlDownloader
+from netspy import setting
+from netspy.network.downloader._curl import CurlDownloader
 
 pytest.importorskip("curl_cffi")
 

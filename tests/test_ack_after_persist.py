@@ -16,11 +16,11 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.buffer.item_buffer import ItemBuffer
-from mineworker.dedup import Dedup
-from mineworker.pipelines.base import BasePipeline
-from mineworker.utils.stats import Stats
+from netspy import setting
+from netspy.buffer.item_buffer import ItemBuffer
+from netspy.dedup import Dedup
+from netspy.pipelines.base import BasePipeline
+from netspy.utils.stats import Stats
 
 
 class RefusingPipeline(BasePipeline):
@@ -147,11 +147,11 @@ def test_request_stays_held_until_its_data_lands() -> None:
     这条性质是白捡的：`done()` 本来就是把请求从 `_in_progress` 里摘掉的地方，
     而续期和结束判定读的正是它。但「本该白捡」和「真的接上了」是两回事。
     """
-    from mineworker.buffer.request_buffer import RequestBuffer
-    from mineworker.core.base_parser import BaseParser
-    from mineworker.core.collector import Collector
-    from mineworker.core.parser_control import ParserWorker
-    from mineworker.network.request import Request
+    from netspy.buffer.request_buffer import RequestBuffer
+    from netspy.core.base_parser import BaseParser
+    from netspy.core.collector import Collector
+    from netspy.core.parser_control import ParserWorker
+    from netspy.network.request import Request
 
     class _Queue:
         def __init__(self) -> None:

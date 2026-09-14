@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mineworker import setting
+from netspy import setting
 
 
 def test_defaults_present() -> None:
@@ -23,32 +23,32 @@ def test_as_dict_snapshot_covers_all_keys() -> None:
 
 
 def test_env_override_int(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_SPIDER_THREAD_COUNT", "9")
+    monkeypatch.setenv("NETSPY_SPIDER_THREAD_COUNT", "9")
     setting.reload()
     assert setting.SPIDER_THREAD_COUNT == 9
 
 
 def test_env_override_bool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_LOG_COLOR", "false")
+    monkeypatch.setenv("NETSPY_LOG_COLOR", "false")
     setting.reload()
     assert setting.LOG_COLOR is False
 
 
 def test_env_override_float(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_REQUEST_TIMEOUT", "5.5")
+    monkeypatch.setenv("NETSPY_REQUEST_TIMEOUT", "5.5")
     setting.reload()
     assert pytest.approx(5.5) == setting.REQUEST_TIMEOUT
 
 
 def test_env_override_dict_via_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_WEBDRIVER", '{"pool_size": 5, "headless": false}')
+    monkeypatch.setenv("NETSPY_WEBDRIVER", '{"pool_size": 5, "headless": false}')
     setting.reload()
     assert setting.WEBDRIVER["pool_size"] == 5
     assert setting.WEBDRIVER["headless"] is False
 
 
 def test_bad_env_value_warns_and_keeps_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_SPIDER_THREAD_COUNT", "not-an-int")
+    monkeypatch.setenv("NETSPY_SPIDER_THREAD_COUNT", "not-an-int")
     with pytest.warns(UserWarning, match="解析失败"):
         setting.reload()
     assert setting.SPIDER_THREAD_COUNT == 4
@@ -87,7 +87,7 @@ def test_broken_project_file_warns_and_keeps_defaults(
 def test_env_beats_project_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "setting.py").write_text("SPIDER_THREAD_COUNT = 7\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("MINEWORKER_SPIDER_THREAD_COUNT", "11")
+    monkeypatch.setenv("NETSPY_SPIDER_THREAD_COUNT", "11")
     setting.reload()
     assert setting.SPIDER_THREAD_COUNT == 11
 
@@ -95,16 +95,16 @@ def test_env_beats_project_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_explicit_setting_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = tmp_path / "my_conf.py"
     cfg.write_text("COLLECTOR_TASK_COUNT = 42\n", encoding="utf-8")
-    monkeypatch.setenv("MINEWORKER_SETTING", str(cfg))
+    monkeypatch.setenv("NETSPY_SETTING", str(cfg))
     setting.reload()
     assert setting.COLLECTOR_TASK_COUNT == 42
 
 
 def test_reload_restores_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MINEWORKER_SPIDER_THREAD_COUNT", "99")
+    monkeypatch.setenv("NETSPY_SPIDER_THREAD_COUNT", "99")
     setting.reload()
     assert setting.SPIDER_THREAD_COUNT == 99
-    monkeypatch.delenv("MINEWORKER_SPIDER_THREAD_COUNT")
+    monkeypatch.delenv("NETSPY_SPIDER_THREAD_COUNT")
     setting.reload()
     assert setting.SPIDER_THREAD_COUNT == 4
 

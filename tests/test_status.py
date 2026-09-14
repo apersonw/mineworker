@@ -11,10 +11,10 @@ from email.utils import format_datetime
 
 import pytest
 
-from mineworker import Request, setting
-from mineworker.exceptions import HttpStatusError, RequestError
-from mineworker.network import status
-from mineworker.network.response import Response
+from netspy import Request, setting
+from netspy.exceptions import HttpStatusError, RequestError
+from netspy.network import status
+from netspy.network.response import Response
 
 
 def _resp(code: int, headers: dict[str, str] | None = None) -> Response:

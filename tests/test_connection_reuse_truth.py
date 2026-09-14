@@ -16,11 +16,11 @@ from collections.abc import Iterator
 import pytest
 
 from conn_counting_server import ConnCountingServer
-from mineworker import setting
-from mineworker.network.downloader import close_default_downloaders
-from mineworker.network.downloader._async_httpx import AsyncHttpxDownloader
-from mineworker.network.downloader._httpx import HttpxDownloader
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.network.downloader import close_default_downloaders
+from netspy.network.downloader._async_httpx import AsyncHttpxDownloader
+from netspy.network.downloader._httpx import HttpxDownloader
+from netspy.network.request import Request
 
 N = 6
 
@@ -113,7 +113,7 @@ def test_curl_session_does_not_reuse_and_that_is_documented(
     而不是把这条用例删掉。
     """
     pytest.importorskip("curl_cffi")
-    from mineworker.network.downloader._curl import CurlDownloader
+    from netspy.network.downloader._curl import CurlDownloader
 
     dl = CurlDownloader(use_session=True, impersonate="chrome")
     try:

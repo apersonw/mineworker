@@ -17,9 +17,9 @@ import httpx
 import pytest
 import respx
 
-from mineworker import setting
-from mineworker.network.downloader._common import is_proxy_fault
-from mineworker.network.proxy_pool.api import ApiProxyPool
+from netspy import setting
+from netspy.network.downloader._common import is_proxy_fault
+from netspy.network.proxy_pool.api import ApiProxyPool
 
 _LIST = "https://p/list"
 _P = "1.1.1.1:80"
@@ -28,7 +28,7 @@ _P = "1.1.1.1:80"
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     now = [1000.0]
-    monkeypatch.setattr("mineworker.network.proxy_pool.api.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("netspy.network.proxy_pool.api.time.monotonic", lambda: now[0])
     return now
 
 
@@ -164,13 +164,13 @@ class _RecordingPool:
 @pytest.fixture
 def recording(monkeypatch: pytest.MonkeyPatch) -> _RecordingPool:
     pool = _RecordingPool()
-    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: pool)
+    monkeypatch.setattr("netspy.network.downloader._common.get_proxy_pool", lambda: pool)
     return pool
 
 
 def test_failure_is_routed_by_who_is_to_blame(recording: _RecordingPool) -> None:
     """分类对了、路由错了，一样是那个 bug。"""
-    from mineworker.network.downloader._common import report_proxy_failure
+    from netspy.network.downloader._common import report_proxy_failure
 
     report_proxy_failure("http://p1", httpx.ConnectError("拨不通"))
     report_proxy_failure("http://p2", httpx.ReadTimeout("目标站太慢"))
@@ -182,8 +182,8 @@ def test_downloader_reports_success_so_the_count_is_really_consecutive(
     recording: _RecordingPool,
 ) -> None:
     """成功路径必须上报，否则「连续失败」永远只是「累计失败」。"""
-    from mineworker.network.downloader._httpx import HttpxDownloader
-    from mineworker.network.request import Request
+    from netspy.network.downloader._httpx import HttpxDownloader
+    from netspy.network.request import Request
 
     respx.get("https://t/x").mock(return_value=httpx.Response(200, text="ok"))
     dl = HttpxDownloader(timeout=5, verify=False, proxy="http://p1")
@@ -214,13 +214,13 @@ class _LegacyPool:
 
 def test_a_legacy_duck_typed_pool_still_works(monkeypatch: pytest.MonkeyPatch) -> None:
     """老自定义池不能因为新增钩子就崩 —— 这条用例是被一次真的红逼出来的。"""
-    from mineworker.network.downloader._common import (
+    from netspy.network.downloader._common import (
         report_good_proxy,
         report_proxy_failure,
     )
 
     pool = _LegacyPool()
-    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: pool)
+    monkeypatch.setattr("netspy.network.downloader._common.get_proxy_pool", lambda: pool)
     report_good_proxy("http://p1")  # 没有 report_good：静默跳过
     report_proxy_failure("http://p1", httpx.ReadTimeout("慢"))  # 没有 report_suspect：不拉黑
     assert pool.bad == []

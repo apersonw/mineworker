@@ -1,0 +1,332 @@
+"""``ParserWorker`` —— 工作线程：取请求 → 下载 → 校验 → 回调 → 分发结果。"""
+
+from __future__ import annotations
+
+import threading
+import time
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any, cast
+
+from netspy import setting
+from netspy.core import context
+from netspy.exceptions import (
+    ContentTypeRejectedError,
+    HttpStatusError,
+    NotRetryError,
+    RequestError,
+    ResponseTooLargeError,
+    SpiderError,
+    ValidationError,
+)
+from netspy.network import circuit, robots, throttle
+from netspy.network import status as status_policy
+from netspy.network.downloader import download_request
+from netspy.network.middleware import MiddlewareManager
+from netspy.network.request import Request
+from netspy.network.response import Response
+from netspy.utils import stats as sk
+from netspy.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from netspy.buffer.item_buffer import ItemBuffer
+    from netspy.buffer.request_buffer import RequestBuffer
+    from netspy.core.base_parser import BaseParser
+    from netspy.core.collector import Collector
+    from netspy.utils.stats import Stats
+
+_FailedSink = Callable[[Request], None]
+
+log = get_logger("worker")
+
+_Callback = Callable[..., "Iterable[Any] | None"]
+
+
+class ParserWorker(threading.Thread):
+    def __init__(
+        self,
+        index: int,
+        *,
+        parser: BaseParser,
+        collector: Collector,
+        request_buffer: RequestBuffer,
+        item_buffer: ItemBuffer,
+        stats: Stats,
+        middleware: MiddlewareManager | None = None,
+        failed_sink: _FailedSink | None = None,
+    ) -> None:
+        super().__init__(name=f"worker-{index}", daemon=True)
+        self._parser = parser
+        self._collector = collector
+        self._request_buffer = request_buffer
+        self._item_buffer = item_buffer
+        self._stats = stats
+        self._middleware = middleware or MiddlewareManager()
+        self._failed_sink = failed_sink
+        self._stop_event = threading.Event()
+        self.busy = False
+        #: 本条请求产出过 item —— 销账权已经交给 ItemBuffer，等它落库
+        self._deferred = False
+
+    def stop(self) -> None:
+        self._stop_event.set()
+
+    # ------------------------------------------------------------------
+    def run(self) -> None:
+        while not self._stop_event.is_set():
+            request = self._collector.get_request(timeout=0.3)
+            if request is None:
+                self.busy = False
+                continue
+            self.busy = True
+            self._deferred = False
+            try:
+                self._process(request)
+            except Exception:
+                log.exception("worker 未捕获异常")
+            finally:
+                # 放在 finally 里：处理过程中抛什么异常都要销账，否则这条任务会挂在
+                # 在途表里直到租约到期被重抓一遍。
+                #
+                # 但产出过 item 的请求例外 —— 那时数据**还只在内存缓冲里**。
+                # 这里销账等于宣布「这条干完了」，节点一被硬杀数据就没了：
+                # 任务不会被回收（已销账），指纹又是入队前写的，重跑也补不回来。
+                # 它的账由 ItemBuffer 在落库之后销。
+                if not self._deferred:
+                    self._collector.done(request)
+                self.busy = False
+
+    # ------------------------------------------------------------------
+    def _process(self, request: Request) -> None:
+        response: Response | None = None
+        try:
+            mw_out = self._middleware.process_request(request)
+            if isinstance(mw_out, Response):
+                response = mw_out
+            else:
+                request = mw_out
+            replaced = self._parser.download_midware(request)
+        except Exception as exc:
+            self._retry_or_fail(request, None, exc, reason="download_midware 异常")
+            return
+        if replaced is not None:
+            request = replaced
+
+        if response is None and request.auto_request and not robots.allowed(request.url):
+            # 被 robots.txt 禁止是**有意跳过**，不是失败 —— 不该污染失败率，
+            # 也不该进 failed_requests.jsonl 等着被回放
+            self._stats.incr(sk.ROBOTS_DROPPED)
+            self._drop(request)
+            return
+
+        if response is None and request.auto_request:
+            try:
+                response = download_request(request)
+            except ContentTypeRejectedError:
+                # 白名单之外的类型是**有意跳过**，body 压根没读、连接已断开 ——
+                # 和 robots.txt 一样不该污染失败率
+                self._stats.incr(sk.CONTENT_TYPE_DROPPED)
+                self._drop(request)
+                return
+            except RequestError as exc:
+                self._retry_or_fail(request, None, exc, reason="下载失败")
+                return
+
+        if response is not None:
+            resp_out = self._middleware.process_response(request, response)
+            if isinstance(resp_out, Request):
+                self._retry_replacement(request, resp_out, response)
+                return
+            response = resp_out
+
+        # 状态码检查排在 validate 之前：状态码不对就不该再跑用户的校验与回调
+        if response is not None and not self._check_status(request, response):
+            return
+
+        if response is not None and not self._validate(request, response):
+            return
+
+        callback = self._resolve_callback(request)
+        try:
+            # 生成器回调的异常会在迭代时才抛出，因此调用与分发放在同一 try 内。
+            # 上下文覆盖整个 dispatch：用户在回调里调 update_task 时，
+            # 框架要能知道当前处理的是哪个请求
+            context.set_current(request, self._item_buffer)
+            self._dispatch(callback(request, response, **request.cb_kwargs), request)
+        except NotRetryError:
+            self._drop(request)
+            return
+        except Exception as exc:
+            self._stats.incr(sk.PARSE_ERROR)
+            self._retry_or_fail(request, response, exc, reason="解析异常")
+            return
+        finally:
+            context.set_current(None, None)
+
+        self._stats.incr(sk.REQUEST_OK)
+        # 成功即清零该域的连续失败计数（熔断只认「连续」）
+        circuit.record_success(request.url)
+
+    def _check_status(self, request: Request, response: Response) -> bool:
+        """按状态码策略放行 / 重试 / 判失败。返回 False 表示本次处理到此为止。"""
+        verdict = status_policy.classify(response)
+        if verdict == "ok":
+            return True
+        exc = HttpStatusError(response.status_code, response.url)
+        reason = f"HTTP {response.status_code}"
+        if verdict == "retry":
+            # 被限速时把冷却抑制到整个域：只让撞上 429 的这个 worker 等是没用的，
+            # 其余 worker 会继续满速打同一个域，退避形同虚设
+            cooldown = status_policy.retry_after_seconds(response, now=time.time())
+            if cooldown:
+                # 惩罚要和 RETRY_AFTER_MAX 一起封顶：服务端说「一小时后再来」时我们
+                # 已经决定放弃这个请求，就不该再给整个域挂一小时冷却 —— 那会让爬虫
+                # 在该域上彻底停摆，且 worker 全睡在 throttle 里
+                throttle.penalize(request.url, min(cooldown, setting.RETRY_AFTER_MAX))
+            # 服务端要求等太久时不值得占着 worker 干等，直接判失败让位给别的任务
+            too_long = status_policy.retry_after_too_long(response, now=time.time())
+            if too_long is not None:
+                self._fail(
+                    request,
+                    response,
+                    reason=f"{reason}（Retry-After {too_long:.0f}s 超过上限）",
+                    exc=exc,
+                )
+            else:
+                self._retry_or_fail(request, response, exc, reason=reason)
+        else:
+            self._fail(request, response, reason=reason, exc=exc)
+        return False
+
+    def _validate(self, request: Request, response: Response) -> bool:
+        try:
+            ok = self._parser.validate(request, response)
+        except ValidationError as exc:
+            self._retry_or_fail(request, response, exc, reason="校验失败")
+            return False
+        except NotRetryError:
+            self._drop(request)
+            return False
+        if ok is False:
+            self._drop(request)
+            return False
+        return True
+
+    def _resolve_callback(self, request: Request) -> _Callback:
+        cb = request.callback
+        if cb is None:
+            return self._parser.parse
+        if callable(cb):
+            return cb
+        method = getattr(self._parser, cb, None)
+        if not callable(method):
+            raise SpiderError(f"找不到回调方法 {cb!r}（parser={type(self._parser).__name__}）")
+        return cast("_Callback", method)
+
+    def _dispatch(self, results: Iterable[Any] | None, owner: Request) -> None:
+        if results is None:
+            return
+        for obj in results:
+            if isinstance(obj, Request):
+                self._request_buffer.put(obj)
+            elif callable(obj):
+                obj()
+            else:
+                self._item_buffer.put(obj, owner=owner)
+                # 放在 put 之后：put 要是抛了，没有 item 进缓冲，
+                # 这条请求就该走 finally 里的正常销账
+                self._deferred = True
+
+    # ------------------------------------------------------------------
+    def _retry_or_fail(
+        self,
+        request: Request,
+        response: Response | None,
+        exc: BaseException,
+        *,
+        reason: str,
+    ) -> None:
+        # 有些失败重试也没用：响应体超限的话，再抓一次还是一样大 ——
+        # 只是把同样的流量和内存再烧 SPIDER_MAX_RETRY_TIMES 遍
+        too_large = isinstance(exc, ResponseTooLargeError)
+        if too_large or request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
+            self._fail(request, response, reason=reason, exc=exc)
+            return
+        request.retry_times += 1
+        self._stats.incr(sk.RETRY)
+        try:
+            self._parser.exception_request(request, response, exc)
+        except Exception:
+            log.exception("exception_request 钩子异常")
+        log.warning(
+            "{}，第 {}/{} 次重试：{} {}",
+            reason,
+            request.retry_times,
+            setting.SPIDER_MAX_RETRY_TIMES,
+            request.method,
+            request.url,
+        )
+        delay = status_policy.retry_delay(request, response, now=time.time())
+        if delay > 0:
+            time.sleep(delay)
+        self._request_buffer.put_retry(request)
+
+    def _retry_replacement(self, request: Request, retry: Request, response: Response) -> None:
+        """中间件把响应换成了一个新请求（「掉登录，换号重试」那种）。
+
+        这条路原本既不递增 `retry_times` 也不走 `_retry_or_fail`，而中间件还会清掉
+        `filter_repeat` —— 于是重试上限管不住它、去重也拦不住它。
+        实测 1 个页面被打了 **76 次 / 8 秒**，只被运行时长上限拦住。
+
+        预算要从**原请求**接过来：重试的是中间件换过的那个请求（换了 cookie、
+        清了字段），从 0 开始的话等于没加上限。
+        """
+        if request.retry_times >= setting.SPIDER_MAX_RETRY_TIMES:
+            self._fail(request, response, reason="中间件反复要求重试")
+            return
+        retry.retry_times = request.retry_times + 1
+        retry.filter_repeat = False
+        # 记 RETRY 而不是 REQUEST_OK：一次「被判为无效、要重来」的响应
+        # 算成「请求成功」，汇总里的数字就成了假的
+        self._stats.incr(sk.RETRY)
+        log.warning(
+            "中间件要求重试，第 {}/{} 次：{} {}",
+            retry.retry_times,
+            setting.SPIDER_MAX_RETRY_TIMES,
+            retry.method,
+            retry.url,
+        )
+        self._request_buffer.put(retry)
+
+    def _fail(
+        self,
+        request: Request,
+        response: Response | None,
+        *,
+        reason: str,
+        exc: BaseException | None = None,
+    ) -> None:
+        self._stats.incr(sk.REQUEST_FAILED)
+        # 在这里而不是每次失败都数：重试期间代理池已经轮换过出口，
+        # 所以「代理坏了」会被重试吸收，只有站点真的挂了才会连续走到这里
+        if circuit.counts_as_unhealthy(exc, response):
+            circuit.record_failure(request.url)
+        log.error(
+            "{}，放弃：{} {}（已重试 {} 次）",
+            reason,
+            request.method,
+            request.url,
+            request.retry_times,
+        )
+        try:
+            self._dispatch(self._parser.failed_request(request, response), request)
+        except Exception:
+            log.exception("failed_request 钩子异常")
+        if self._failed_sink is not None:
+            try:
+                self._failed_sink(request)
+            except Exception:
+                log.exception("failed_sink 异常")
+
+    def _drop(self, request: Request) -> None:
+        self._stats.incr(sk.DROPPED)
+        log.debug("丢弃：{} {}", request.method, request.url)

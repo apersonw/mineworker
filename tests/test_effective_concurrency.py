@@ -15,11 +15,11 @@ from collections.abc import Iterator
 
 import pytest
 
-from mineworker import setting
-from mineworker.core.spiders.air_spider import AirSpider
-from mineworker.network.downloader import close_default_downloaders
-from mineworker.network.downloader._async_httpx import loop_count
-from mineworker.network.downloader._common import effective_concurrency, shard_count
+from netspy import setting
+from netspy.core.spiders.air_spider import AirSpider
+from netspy.network.downloader import close_default_downloaders
+from netspy.network.downloader._async_httpx import loop_count
+from netspy.network.downloader._common import effective_concurrency, shard_count
 
 
 class _Spider(AirSpider):

@@ -3,7 +3,7 @@
 单元测试只能证明「SQL 字符串长这样」，证明不了「数据库认这条 SQL」。MysqlPipeline
 在此之前从没跑过真库 —— 这个文件补上这个缺口，Postgres 与 MySQL 用同一组用例覆盖。
 
-没配 MINEWORKER_TEST_*_URL 就整体 skip，本地默认不拖慢。
+没配 NETSPY_TEST_*_URL 就整体 skip，本地默认不拖慢。
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from mineworker import UpdateItem, setting
+from netspy import UpdateItem, setting
 
 pytestmark = pytest.mark.integration
 
@@ -50,7 +50,7 @@ def _rows(db: Any, quoted: str) -> list[dict[str, Any]]:
 
 @pytest.fixture
 def pg(postgres_db: Any) -> Any:
-    from mineworker.pipelines.postgres import PostgresPipeline
+    from netspy.pipelines.postgres import PostgresPipeline
 
     _setup_pg(postgres_db)
     return PostgresPipeline(db=postgres_db), postgres_db, TABLE
@@ -58,7 +58,7 @@ def pg(postgres_db: Any) -> Any:
 
 @pytest.fixture
 def my(mysql_db: Any) -> Any:
-    from mineworker.pipelines.mysql import MysqlPipeline
+    from netspy.pipelines.mysql import MysqlPipeline
 
     _setup_mysql(mysql_db)
     return MysqlPipeline(db=mysql_db), mysql_db, f"`{TABLE}`"
@@ -165,12 +165,12 @@ def test_mysql_without_on_duplicate_reports_failure(
 # ---- 失败数据 dump 一圈回放之后 ---------------------------------------
 def _point_settings_at_test_pg(monkeypatch: pytest.MonkeyPatch) -> None:
     """管道按 setting.POSTGRES_* 自己建连接，而夹具走的是 URL —— 对齐到同一个库。"""
-    parts = urlsplit(os.environ["MINEWORKER_TEST_POSTGRES_URL"])
+    parts = urlsplit(os.environ["NETSPY_TEST_POSTGRES_URL"])
     monkeypatch.setattr(setting, "POSTGRES_HOST", parts.hostname or "localhost")
     monkeypatch.setattr(setting, "POSTGRES_PORT", parts.port or 5432)
     monkeypatch.setattr(setting, "POSTGRES_USER", parts.username or "postgres")
     monkeypatch.setattr(setting, "POSTGRES_PASSWORD", parts.password or "")
-    monkeypatch.setattr(setting, "POSTGRES_DB", parts.path.lstrip("/") or "mineworker")
+    monkeypatch.setattr(setting, "POSTGRES_DB", parts.path.lstrip("/") or "netspy")
 
 
 class _RefusingPipeline:
@@ -204,19 +204,17 @@ def test_failed_update_survives_the_dump_round_trip(
     retry 报告「成功 1，仍失败 0」、删掉文件，库里那行还是旧值。
     静默、永久、还报告成功。
     """
-    from mineworker.buffer.item_buffer import ItemBuffer
-    from mineworker.commands.retry import retry_items
-    from mineworker.dedup import Dedup
-    from mineworker.utils.stats import Stats
+    from netspy.buffer.item_buffer import ItemBuffer
+    from netspy.commands.retry import retry_items
+    from netspy.dedup import Dedup
+    from netspy.utils.stats import Stats
 
     pipe, db, quoted = pg
     dump = tmp_path / "failed.jsonl"
     monkeypatch.setattr(setting, "FAILED_ITEM_PATH", str(dump))
     monkeypatch.setattr(setting, "ITEM_FILTER_ENABLE", False)
     monkeypatch.setattr(setting, "POSTGRES_ON_CONFLICT", "nothing")
-    monkeypatch.setattr(
-        setting, "ITEM_PIPELINES", ["mineworker.pipelines.postgres.PostgresPipeline"]
-    )
+    monkeypatch.setattr(setting, "ITEM_PIPELINES", ["netspy.pipelines.postgres.PostgresPipeline"])
     _point_settings_at_test_pg(monkeypatch)
 
     pipe.save_items(TABLE, [{"url": "https://dump", "title": "旧标题", "score": 1}])
@@ -292,9 +290,9 @@ def test_update_miss_gets_dumped_instead_of_vanishing(
 ) -> None:
     """走完整的 ItemBuffer 路径：没匹配到的 UpdateItem 要能 dump 出来重试，
     而且**不能记去重指纹** —— 记了这条 URL 就永远不会再被抓。"""
-    from mineworker.buffer.item_buffer import ItemBuffer
-    from mineworker.dedup import Dedup
-    from mineworker.utils.stats import Stats
+    from netspy.buffer.item_buffer import ItemBuffer
+    from netspy.dedup import Dedup
+    from netspy.utils.stats import Stats
 
     _pipe, db, quoted = pg
     dump = tmp_path / "failed.jsonl"
@@ -305,7 +303,7 @@ def test_update_miss_gets_dumped_instead_of_vanishing(
     dedup = Dedup(filter_type="lite")
     buf = ItemBuffer(
         Stats(),
-        pipelines=["mineworker.pipelines.postgres.PostgresPipeline"],
+        pipelines=["netspy.pipelines.postgres.PostgresPipeline"],
         dedup=dedup,
     )
     item = _PriceItem()

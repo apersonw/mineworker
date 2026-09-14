@@ -9,9 +9,9 @@ from collections.abc import Iterator
 
 import pytest
 
-from mineworker import setting
-from mineworker.network import throttle
-from mineworker.network.throttle import DomainThrottle, domain_of
+from netspy import setting
+from netspy.network import throttle
+from netspy.network.throttle import DomainThrottle, domain_of
 
 
 @pytest.fixture(autouse=True)
@@ -250,14 +250,14 @@ def test_global_throttle_falls_back_to_local_when_redis_down(monkeypatch) -> Non
     限速器一挂就放开手脚打目标站，是这里最不该有的失败模式 —— 所以断言的是
     「仍然在等」，不是「没报错」。
     """
-    from mineworker.network import global_throttle
+    from netspy.network import global_throttle
 
     global_throttle.reset()
     monkeypatch.setattr(setting, "GLOBAL_THROTTLE", True)
     monkeypatch.setattr(setting, "DOWNLOAD_DELAY", 0.05)
     monkeypatch.setattr(setting, "RANDOMIZE_DOWNLOAD_DELAY", False)
     monkeypatch.setattr(
-        "mineworker.db.redisdb.get_redis",
+        "netspy.db.redisdb.get_redis",
         lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Redis 连不上")),
     )
 
@@ -269,12 +269,12 @@ def test_global_throttle_falls_back_to_local_when_redis_down(monkeypatch) -> Non
 
 def test_global_throttle_penalize_also_recorded_locally(monkeypatch) -> None:
     """全局惩罚同时落一份本地：Redis 中途失联时冷却不会跟着丢。"""
-    from mineworker.network import global_throttle
+    from netspy.network import global_throttle
 
     global_throttle.reset()
     monkeypatch.setattr(setting, "GLOBAL_THROTTLE", True)
     monkeypatch.setattr(
-        "mineworker.db.redisdb.get_redis",
+        "netspy.db.redisdb.get_redis",
         lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Redis 连不上")),
     )
 

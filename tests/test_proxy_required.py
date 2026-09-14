@@ -16,13 +16,13 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.exceptions import ProxyUnavailableError
-from mineworker.network import proxy_pool
-from mineworker.network.circuit import counts_as_unhealthy
-from mineworker.network.downloader._common import apick_proxy, pick_proxy
-from mineworker.network.proxy_pool.base import ProxyPool
-from mineworker.network.request import Request
+from netspy import setting
+from netspy.exceptions import ProxyUnavailableError
+from netspy.network import proxy_pool
+from netspy.network.circuit import counts_as_unhealthy
+from netspy.network.downloader._common import apick_proxy, pick_proxy
+from netspy.network.proxy_pool.base import ProxyPool
+from netspy.network.request import Request
 
 
 class _Pool(ProxyPool):

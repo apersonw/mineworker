@@ -15,11 +15,11 @@ import textwrap
 
 import pytest
 
-import mineworker
-from mineworker import commands
-from mineworker.__about__ import __version__
+import netspy
+from netspy import commands
+from netspy.__about__ import __version__
 
-DIST = "mineworker"
+DIST = "netspy"
 
 
 def test_version_matches_installed_metadata() -> None:
@@ -28,23 +28,23 @@ def test_version_matches_installed_metadata() -> None:
 
 
 def test_module_version_forwards_about() -> None:
-    assert mineworker.__version__ == __version__
+    assert netspy.__version__ == __version__
 
 
 def test_py_typed_ships_with_package() -> None:
     """没有 py.typed，下游装了包也拿不到类型（mypy strict 的成果就白费了）。"""
-    assert res.files("mineworker").joinpath("py.typed").is_file()
+    assert res.files("netspy").joinpath("py.typed").is_file()
 
 
 def test_templates_ship_with_package() -> None:
-    """CLI 脚手架依赖包内 jinja 模板，漏打包会让 `mineworker create` 直接崩。"""
-    templates = res.files("mineworker.templates")
+    """CLI 脚手架依赖包内 jinja 模板，漏打包会让 `netspy create` 直接崩。"""
+    templates = res.files("netspy.templates")
     for name in ("air_spider.py.jinja", "item.py.jinja", "setting.py.jinja"):
         assert templates.joinpath(name).is_file(), name
 
 
 def test_console_script_entry_point_resolves() -> None:
-    (entry,) = [e for e in md.distribution(DIST).entry_points if e.name == "mineworker"]
+    (entry,) = [e for e in md.distribution(DIST).entry_points if e.name == "netspy"]
     assert entry.group == "console_scripts"
     assert callable(entry.load())
 
@@ -52,7 +52,7 @@ def test_console_script_entry_point_resolves() -> None:
 def test_console_script_without_cli_extra_explains_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """只装核心包时敲 `mineworker`，要给一句能照做的提示，不是 ModuleNotFoundError 堆栈。"""
+    """只装核心包时敲 `netspy`，要给一句能照做的提示，不是 ModuleNotFoundError 堆栈。"""
     real_import = builtins.__import__
 
     def fake_import(name: str, *args: object, **kw: object) -> object:
@@ -60,14 +60,14 @@ def test_console_script_without_cli_extra_explains_itself(
             raise ModuleNotFoundError(f"No module named '{name}'", name="typer")
         return real_import(name, *args, **kw)  # type: ignore[arg-type]
 
-    monkeypatch.delitem(sys.modules, "mineworker.commands.cmdline", raising=False)
+    monkeypatch.delitem(sys.modules, "netspy.commands.cmdline", raising=False)
     monkeypatch.delitem(sys.modules, "typer", raising=False)
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
     with pytest.raises(SystemExit) as excinfo:
         commands.main()
 
-    assert 'pip install "mineworker[cli]"' in str(excinfo.value)
+    assert 'pip install "netspy[cli]"' in str(excinfo.value)
 
 
 def test_declared_extras() -> None:
@@ -76,13 +76,13 @@ def test_declared_extras() -> None:
 
 
 def test_db_submodules_import_without_redis() -> None:
-    """没装 `[redis]` 时，`mineworker.db.mysqldb` 也要能导进来。
+    """没装 `[redis]` 时，`netspy.db.mysqldb` 也要能导进来。
 
-    `mineworker/db/__init__.py` 原来在顶层 `from ... redisdb import ...`，
-    而 redisdb 顶层 `import redis` —— 于是装了 `mineworker[mysql]` 但没装 redis 的
+    `netspy/db/__init__.py` 原来在顶层 `from ... redisdb import ...`，
+    而 redisdb 顶层 `import redis` —— 于是装了 `netspy[mysql]` 但没装 redis 的
     用户，连 `MysqlDB` 都导不进来。导一个子模块不该把父包的可选依赖拖进来。
 
-    在**子进程**里验证：第一版是在本进程里删 `sys.modules['mineworker.db*']`
+    在**子进程**里验证：第一版是在本进程里删 `sys.modules['netspy.db*']`
     再重新导入，结果污染了后面的用例（`test_redis_infra` 里 monkeypatch 过的
     `get_redis` 指向了被换掉的旧模块对象）——单独跑全绿、跟在它后面跑就崩。
     子进程天然隔离，也更接近「用户装了什么」的真实情形。
@@ -96,8 +96,8 @@ def test_db_submodules_import_without_redis() -> None:
                 raise ModuleNotFoundError("No module named 'redis'")
             return real(name, *a, **kw)
         builtins.__import__ = fake
-        import mineworker.db
-        from mineworker.db.mysqldb import MysqlDB
+        import netspy.db
+        from netspy.db.mysqldb import MysqlDB
         assert MysqlDB is not None
         print("OK")
         """

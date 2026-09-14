@@ -6,14 +6,14 @@ import httpx
 import pytest
 import respx
 
-from mineworker import setting
-from mineworker.utils.alert import (
+from netspy import setting
+from netspy.utils.alert import (
     AlertManager,
     FeishuNotifier,
     LogNotifier,
     build_notifiers,
 )
-from mineworker.utils.stats import Stats
+from netspy.utils.stats import Stats
 
 
 class Spy:

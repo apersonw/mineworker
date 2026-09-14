@@ -12,12 +12,12 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WerkzeugRequest
 from werkzeug.wrappers import Response as WerkzeugResponse
 
-from mineworker import Request, RequestError, setting
-from mineworker.network.downloader import close_default_downloaders, get_default_downloader
-from mineworker.network.downloader._common import resolve_impersonate
-from mineworker.network.downloader._curl import CurlDownloader
-from mineworker.network.proxy_pool import ProxyPool, close_proxy_pool
-from mineworker.network.user_agent import USER_AGENTS
+from netspy import Request, RequestError, setting
+from netspy.network.downloader import close_default_downloaders, get_default_downloader
+from netspy.network.downloader._common import resolve_impersonate
+from netspy.network.downloader._curl import CurlDownloader
+from netspy.network.proxy_pool import ProxyPool, close_proxy_pool
+from netspy.network.user_agent import USER_AGENTS
 
 IMPERSONATE = "chrome"
 
@@ -176,7 +176,7 @@ def test_uses_proxy_pool_and_reports_bad(
     downloader: CurlDownloader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     spy = _SpyPool()
-    monkeypatch.setattr("mineworker.network.downloader._common.get_proxy_pool", lambda: spy)
+    monkeypatch.setattr("netspy.network.downloader._common.get_proxy_pool", lambda: spy)
     with pytest.raises(RequestError):
         downloader.download(Request("http://example.invalid/"))
     assert spy.handed == ["http://127.0.0.1:1"]
@@ -222,7 +222,7 @@ def test_no_impersonate_keeps_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.network
 def test_ja3_actually_differs_from_httpx() -> None:
     """唯一能真正证明「伪装生效」的测试：同一端点，两个下载器的 JA3 必须不同。"""
-    from mineworker.network.downloader._httpx import HttpxDownloader
+    from netspy.network.downloader._httpx import HttpxDownloader
 
     url = "https://tls.peet.ws/api/all"
     with HttpxDownloader() as plain, CurlDownloader() as curl:

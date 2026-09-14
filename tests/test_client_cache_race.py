@@ -20,8 +20,8 @@ import time
 
 import pytest
 
-from mineworker import setting
-from mineworker.network.downloader._common import ProxyClientCache
+from netspy import setting
+from netspy.network.downloader._common import ProxyClientCache
 
 
 class _FakeClient:

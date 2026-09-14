@@ -10,11 +10,11 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-import mineworker as mw
-from mineworker import setting
-from mineworker.network import circuit, robots, throttle
-from mineworker.network.downloader import close_default_downloaders
-from mineworker.utils import stats as sk
+import netspy as mw
+from netspy import setting
+from netspy.network import circuit, robots, throttle
+from netspy.network.downloader import close_default_downloaders
+from netspy.utils import stats as sk
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def _clean() -> Iterator[None]:
     robots.reset()
     setting.ITEM_PIPELINES = []
     setting.LOG_LEVEL = "CRITICAL"
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
     yield

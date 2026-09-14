@@ -11,12 +11,12 @@ import pytest
 from pytest_httpserver import HTTPServer
 from typer.testing import CliRunner
 
-import mineworker as mw
-from mineworker import setting
-from mineworker.commands import create as gen
-from mineworker.commands.cmdline import app
-from mineworker.commands.retry import retry_items, retry_requests
-from mineworker.pipelines.base import BasePipeline
+import netspy as mw
+from netspy import setting
+from netspy.commands import create as gen
+from netspy.commands.cmdline import app
+from netspy.commands.retry import retry_items, retry_requests
+from netspy.pipelines.base import BasePipeline
 
 runner = CliRunner()
 
@@ -54,7 +54,7 @@ def test_name_helpers() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "mineworker" in result.stdout
+    assert "netspy" in result.stdout
 
 
 def test_create_without_flags_fails() -> None:
@@ -160,7 +160,7 @@ def test_create_force_overwrites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 # ---------------------------------------------------------------- shell
 def test_shell_namespace(httpserver: HTTPServer) -> None:
-    from mineworker.commands.shell import build_namespace
+    from netspy.commands.shell import build_namespace
 
     httpserver.expect_request("/").respond_with_data("<h1>hi</h1>", content_type="text/html")
     ns = build_namespace(httpserver.url_for("/"))

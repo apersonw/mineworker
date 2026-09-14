@@ -6,7 +6,7 @@
 
 判据不看框架的 stats（那是框架自己说自己），只看：
 - 靶场每条路径被请求了几次
-- 数据最终有没有进真库（需要 `MINEWORKER_TEST_POSTGRES_URL`，没配就 skip）
+- 数据最终有没有进真库（需要 `NETSPY_TEST_POSTGRES_URL`，没配就 skip）
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ from typing import Any
 
 import pytest
 
-import mineworker as mw
+import netspy as mw
 from integration_site import Site
-from mineworker import setting
-from mineworker.network import circuit, throttle
-from mineworker.network.downloader import close_default_downloaders
+from netspy import setting
+from netspy.network import circuit, throttle
+from netspy.network.downloader import close_default_downloaders
 
 N_ITEMS = 8
 
@@ -74,7 +74,7 @@ def _configure(**over: Any) -> None:
     setting.LOG_LEVEL = "ERROR"
     for key, value in over.items():
         setattr(setting, key, value)
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
 
@@ -170,14 +170,14 @@ def test_items_land_in_a_real_database(postgres_db: Any) -> None:
     import os
     from urllib.parse import urlparse
 
-    parsed = urlparse(os.environ["MINEWORKER_TEST_POSTGRES_URL"])
+    parsed = urlparse(os.environ["NETSPY_TEST_POSTGRES_URL"])
 
     postgres_db.execute("DROP TABLE IF EXISTS fullstack_items")
     postgres_db.execute("CREATE TABLE fullstack_items (url text primary key, title text)")
 
     with Site(n_items=N_ITEMS) as site:
         _configure(
-            ITEM_PIPELINES=["mineworker.pipelines.postgres.PostgresPipeline"],
+            ITEM_PIPELINES=["netspy.pipelines.postgres.PostgresPipeline"],
             ROBOTS_OBEY=False,
             POSTGRES_HOST=parsed.hostname or "127.0.0.1",
             POSTGRES_PORT=parsed.port or 5432,

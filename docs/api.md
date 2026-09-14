@@ -1,53 +1,53 @@
 # API
 
-::: mineworker.AirSpider
+::: netspy.AirSpider
     options:
       members: [start, stop]
 
-::: mineworker.Spider
+::: netspy.Spider
     options:
       members: [start, stop]
 
-::: mineworker.TaskSpider
+::: netspy.TaskSpider
     options:
       members: [task_requests, fetch_tasks, add_tasks, push_tasks, start, stop]
 
-::: mineworker.BatchSpider
+::: netspy.BatchSpider
     options:
       members: [task_requests, update_task, failed_request, start, start_monitor, stop]
 
-::: mineworker.core.batch_store.BatchStore
+::: netspy.core.batch_store.BatchStore
 
-::: mineworker.core.batch_monitor.BatchMonitor
+::: netspy.core.batch_monitor.BatchMonitor
     options:
       members: [run, run_once, stop]
 
-::: mineworker.BaseParser
+::: netspy.BaseParser
 
-::: mineworker.Request
+::: netspy.Request
 
-::: mineworker.Response
+::: netspy.Response
 
-::: mineworker.Item
+::: netspy.Item
 
-::: mineworker.UpdateItem
+::: netspy.UpdateItem
 
-::: mineworker.pipelines.base.BasePipeline
+::: netspy.pipelines.base.BasePipeline
 
-::: mineworker.pipelines.mysql.MysqlPipeline
+::: netspy.pipelines.mysql.MysqlPipeline
 
-::: mineworker.db.mysqldb.MysqlDB
+::: netspy.db.mysqldb.MysqlDB
 
-::: mineworker.User
+::: netspy.User
 
-::: mineworker.network.user_pool.base.UserPool
+::: netspy.network.user_pool.base.UserPool
 
-::: mineworker.LocalUserPool
+::: netspy.LocalUserPool
 
-::: mineworker.GuestUserPool
+::: netspy.GuestUserPool
 
-::: mineworker.RedisUserPool
+::: netspy.RedisUserPool
 
-::: mineworker.network.middleware.DownloaderMiddleware
+::: netspy.network.middleware.DownloaderMiddleware
 
-::: mineworker.network.proxy_pool.base.ProxyPool
+::: netspy.network.proxy_pool.base.ProxyPool

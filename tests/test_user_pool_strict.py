@@ -18,13 +18,13 @@ from typing import Any
 
 import pytest
 
-from mineworker import setting
-from mineworker.exceptions import UserUnavailableError
-from mineworker.network.circuit import counts_as_unhealthy
-from mineworker.network.request import Request
-from mineworker.network.response import Response
-from mineworker.network.user_pool.base import User, UserPool
-from mineworker.network.user_pool.middleware import UserPoolMiddleware
+from netspy import setting
+from netspy.exceptions import UserUnavailableError
+from netspy.network.circuit import counts_as_unhealthy
+from netspy.network.request import Request
+from netspy.network.response import Response
+from netspy.network.user_pool.base import User, UserPool
+from netspy.network.user_pool.middleware import UserPoolMiddleware
 
 
 class _Pool(UserPool):
@@ -165,7 +165,7 @@ def test_exhausted_retries_are_recoverable(tmp_path: Any, monkeypatch: pytest.Mo
     """
     import json
 
-    from mineworker.core.base_scheduler import BaseScheduler
+    from netspy.core.base_scheduler import BaseScheduler
 
     dump = tmp_path / "failed_requests.jsonl"
     monkeypatch.setattr(setting, "FAILED_REQUEST_PATH", str(dump))

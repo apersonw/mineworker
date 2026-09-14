@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from mineworker.core.batch_store import DOING, DONE, TODO, MysqlBatchStore
+from netspy.core.batch_store import DOING, DONE, TODO, MysqlBatchStore
 
 pytestmark = pytest.mark.integration
 
@@ -95,7 +95,7 @@ def test_concurrent_claim_never_hands_out_the_same_task_twice(
 
     判据是可数的事实：所有 worker 认领到的 id 加起来有没有重复。
     """
-    from mineworker.db.mysqldb import MysqlDB
+    from netspy.db.mysqldb import MysqlDB
 
     n_tasks, n_workers, batch = 200, 6, 10
     _fill(task_table, n_tasks)
@@ -148,12 +148,12 @@ N_TASKS = 20
 
 def _worker(base: str, mysql_url: str, redis_url: str, table: str, key: str) -> None:
     """一个 worker 进程：从共享队列取任务、抓取、回写状态。"""
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.core.batch_store import MysqlBatchStore
-    from mineworker.core.spiders.batch_spider import BatchSpider
-    from mineworker.db.mysqldb import MysqlDB
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.core.batch_store import MysqlBatchStore
+    from netspy.core.spiders.batch_spider import BatchSpider
+    from netspy.db.mysqldb import MysqlDB
+    from netspy.utils import log
 
     setting.REDIS_URL = redis_url
     setting.ITEM_PIPELINES = []
@@ -183,12 +183,12 @@ def _worker(base: str, mysql_url: str, redis_url: str, table: str, key: str) -> 
 
 def _master(base: str, mysql_url: str, redis_url: str, table: str, key: str) -> None:
     """master 进程：认领任务、往队列里灌。"""
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.core.batch_store import MysqlBatchStore
-    from mineworker.core.spiders.batch_spider import BatchSpider
-    from mineworker.db.mysqldb import MysqlDB
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.core.batch_store import MysqlBatchStore
+    from netspy.core.spiders.batch_spider import BatchSpider
+    from netspy.db.mysqldb import MysqlDB
+    from netspy.utils import log
 
     setting.REDIS_URL = redis_url
     setting.LOG_LEVEL = "CRITICAL"

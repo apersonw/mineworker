@@ -1,6 +1,6 @@
 # benchmarks
 
-回答一个问题：**MineWorker 的吞吐在哪里触顶、为什么触顶。**
+回答一个问题：**Netspy 的吞吐在哪里触顶、为什么触顶。**
 
 ```bash
 python benchmarks/server.py            # 靶子自检：确认它自己不是瓶颈

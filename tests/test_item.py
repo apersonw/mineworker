@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mineworker import Item, UpdateItem
+from netspy import Item, UpdateItem
 
 
 class NewsItem(Item):

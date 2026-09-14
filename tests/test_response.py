@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mineworker import Response
+from netspy import Response
 
 HTML = """<!doctype html><html><head><title>T</title></head>
 <body><h1 class="x">Hello</h1><a href="/next">n</a><p>id=42</p></body></html>"""

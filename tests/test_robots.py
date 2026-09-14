@@ -11,9 +11,9 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-from mineworker import setting
-from mineworker.network import robots, throttle
-from mineworker.network.robots import RobotsCache, robots_url
+from netspy import setting
+from netspy.network import robots, throttle
+from netspy.network.robots import RobotsCache, robots_url
 
 RULES = "User-agent: *\nDisallow: /private\nAllow: /\n"
 
@@ -176,8 +176,8 @@ def test_module_level_allowed_respects_rules(httpserver: HTTPServer) -> None:
 # ---- 端到端：完整 AirSpider 链路 --------------------------------------
 def test_disallowed_url_is_skipped_not_failed(httpserver: HTTPServer) -> None:
     """被 robots 拦下是**有意跳过**，不该计入失败、也不该产生请求。"""
-    import mineworker as mw
-    from mineworker.utils import stats as sk
+    import netspy as mw
+    from netspy.utils import stats as sk
 
     _serve(httpserver, RULES)
     hits: list[str] = []

@@ -10,7 +10,7 @@ import pymongo
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import AirSpider, Item, Request, UpdateItem, setting
+from netspy import AirSpider, Item, Request, UpdateItem, setting
 
 
 class NewsItem(Item):
@@ -29,7 +29,7 @@ def _fast_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(setting, "BUFFER_FLUSH_INTERVAL", 0.02)
     monkeypatch.setattr(setting, "DEDUP_FILTER", "lite")
     monkeypatch.setattr(setting, "RANDOM_USER_AGENT", False)
-    monkeypatch.setattr(setting, "ITEM_PIPELINES", ["mineworker.pipelines.mongo.MongoPipeline"])
+    monkeypatch.setattr(setting, "ITEM_PIPELINES", ["netspy.pipelines.mongo.MongoPipeline"])
     monkeypatch.setattr(setting, "MONGO_DB", "spider_test")
 
 

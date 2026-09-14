@@ -9,10 +9,10 @@ import pytest
 from pytest_httpserver import HTTPServer
 from werkzeug import Response as WResponse
 
-from mineworker import Request, Spider, setting
-from mineworker.core import redis_scheduler
-from mineworker.core.task_queue import RedisTaskQueue
-from mineworker.exceptions import ValidationError
+from netspy import Request, Spider, setting
+from netspy.core import redis_scheduler
+from netspy.core.task_queue import RedisTaskQueue
+from netspy.exceptions import ValidationError
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,7 @@ def _fast(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(setting, "SPIDER_THREAD_COUNT", 3)
 
 
-NS = "mineworker"  # setting.REDIS_KEY_PREFIX
+NS = "netspy"  # setting.REDIS_KEY_PREFIX
 
 
 def _setup_pages(server: HTTPServer, pages: int, per: int) -> None:

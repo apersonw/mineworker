@@ -10,16 +10,16 @@ from collections.abc import Iterator
 
 import pytest
 
-from mineworker import setting
-from mineworker.exceptions import (
+from netspy import setting
+from netspy.exceptions import (
     HttpStatusError,
     RequestError,
     SpiderError,
     ValidationError,
 )
-from mineworker.network import circuit, throttle
-from mineworker.network.circuit import CircuitBreaker, counts_as_unhealthy
-from mineworker.network.response import Response
+from netspy.network import circuit, throttle
+from netspy.network.circuit import CircuitBreaker, counts_as_unhealthy
+from netspy.network.response import Response
 
 
 @pytest.fixture(autouse=True)

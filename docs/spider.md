@@ -120,7 +120,7 @@ SPIDER_MAX_RUNTIME = 3600.0   # 秒；0 = 不限
 ```
 
 到点走**优雅停止**：flush 缓冲区、把未完成请求 dump 到 `failed_requests.jsonl`
-（`mineworker retry --requests` 可回放），然后**正常返回，不抛异常** ——
+（`netspy retry --requests` 可回放），然后**正常返回，不抛异常** ——
 定时任务「跑够一小时就停」不该被当成错误，否则监控会一直告警。
 
 ## robots.txt
@@ -139,8 +139,8 @@ robots.txt 里的 `Crawl-delay` 会自动接管该域的[限速](#限速)，取
 `max(DOWNLOAD_DELAY, Crawl-delay)` —— 站点自己声明的节奏不该被全局默认值放宽。
 
 !!! note "为什么默认值是 `False`"
-    库默认关闭，但 `mineworker create -p` 生成的项目配置里写的是 `ROBOTS_OBEY = True`。
-    这样**新项目开箱合规**，而把 MineWorker 当库嵌入、或抓自己站点 / 内网服务的人
+    库默认关闭，但 `netspy create -p` 生成的项目配置里写的是 `ROBOTS_OBEY = True`。
+    这样**新项目开箱合规**，而把 Netspy 当库嵌入、或抓自己站点 / 内网服务的人
     不会被意外拦住。
 
 !!! note "为什么按 `*` 匹配"
@@ -228,7 +228,7 @@ DOWNLOAD_DELAY = 0.5     # N 个节点**合起来**每 0.5 秒一个请求
 
 ```python
 RESPONSE_CACHE_ENABLE = True          # 默认 False
-RESPONSE_CACHE_PATH = ".mineworker_cache"
+RESPONSE_CACHE_PATH = ".netspy_cache"
 RESPONSE_CACHE_EXPIRE = 3600.0        # 秒；0 = 不过期
 ```
 
@@ -236,8 +236,8 @@ RESPONSE_CACHE_EXPIRE = 3600.0        # 秒；0 = 不过期
 [限速](#限速)名额** —— 否则「重跑不打扰目标站」这件事只做了一半。
 
 ```bash
-mineworker cache            # 看有多少条、占多大
-mineworker cache --clear    # 改了解析逻辑，想重抓真实页面
+netspy cache            # 看有多少条、占多大
+netspy cache --clear    # 改了解析逻辑，想重抓真实页面
 ```
 
 !!! danger "只在开发期开"
@@ -354,7 +354,7 @@ ACCEPT_STATUS_CODES = [404]
 
 下载失败、状态码不被接受、`validate` 抛 `ValidationError`、`parse` 抛非 `NotRetryError` 异常 →
 `retry_times += 1` 重新入队（跳过去重）；超过 `SPIDER_MAX_RETRY_TIMES` →
-调 `failed_request`，并把请求 dump 到 `failed_requests.jsonl`（`mineworker retry --requests` 可回放）。
+调 `failed_request`，并把请求 dump 到 `failed_requests.jsonl`（`netspy retry --requests` 可回放）。
 
 ## 优雅退出
 

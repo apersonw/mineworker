@@ -62,8 +62,8 @@ def _pg_fields(url: str) -> dict[str, Any]:
 
 def _node(base: str, redis_url: str, pg_url: str, seed: bool) -> None:
     """一个爬虫节点（独立进程）。"""
-    import mineworker as mw
-    from mineworker import setting
+    import netspy as mw
+    from netspy import setting
 
     setting.reload()
     setting.REDIS_URL = redis_url
@@ -83,10 +83,10 @@ def _node(base: str, redis_url: str, pg_url: str, seed: bool) -> None:
     setting.SPIDER_STARTUP_GRACE = 6.0
     setting.BUFFER_FLUSH_INTERVAL = 0.05
     setting.LOG_LEVEL = "ERROR"
-    setting.ITEM_PIPELINES = ["mineworker.pipelines.postgres.PostgresPipeline"]
+    setting.ITEM_PIPELINES = ["netspy.pipelines.postgres.PostgresPipeline"]
     for key, value in _pg_fields(pg_url).items():
         setattr(setting, key, value)
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
 
@@ -133,7 +133,7 @@ def test_three_nodes_with_every_feature_on(
     from integration_site import Site
 
     monkeypatch.setenv("DFS_NS", "combo")
-    pg_url = os.environ["MINEWORKER_TEST_POSTGRES_URL"]
+    pg_url = os.environ["NETSPY_TEST_POSTGRES_URL"]
     postgres_db.execute(f"DROP TABLE IF EXISTS {TABLE}")
     postgres_db.execute(f"CREATE TABLE {TABLE} (url text primary key, title text)")
 
@@ -162,8 +162,8 @@ def test_three_nodes_with_every_feature_on(
 
 def _dedup_node(base: str, redis_url: str, backend: str, ns: str) -> None:
     """只验去重的精简节点：种子是 /a 和 /b，两者都链到 /shared。"""
-    import mineworker as mw
-    from mineworker import setting
+    import netspy as mw
+    from netspy import setting
 
     setting.reload()
     setting.REDIS_URL = redis_url
@@ -175,7 +175,7 @@ def _dedup_node(base: str, redis_url: str, backend: str, ns: str) -> None:
     setting.DONE_CHECK_TIMES = 3
     setting.SPIDER_STARTUP_GRACE = 4.0
     setting.LOG_LEVEL = "ERROR"
-    from mineworker.utils import log
+    from netspy.utils import log
 
     log.configure()
 
@@ -227,8 +227,8 @@ def test_dedup_backend_decides_whether_two_processes_share_fingerprints(
     端到端的证据留在 roadmap 里：同样两节点两入口，`memory` 下 `/shared` 被抓
     **2** 次、`redis` 下 1 次。
     """
-    from mineworker import setting
-    from mineworker.dedup import get_request_filter
+    from netspy import setting
+    from netspy.dedup import get_request_filter
 
     setting.reload()
     setting.REDIS_URL = clean_redis
@@ -261,9 +261,9 @@ def test_distributed_warns_about_local_dedup(
     于是把 `_on_start` 里的调用整个删掉，用例照样 5 条全绿 —— 验的是方法本身，
     不是它有没有被接上去。
     """
-    import mineworker as mw
-    from mineworker import setting
-    from mineworker.utils import log
+    import netspy as mw
+    from netspy import setting
+    from netspy.utils import log
 
     class Quiet(mw.Spider):
         def start_requests(self) -> Any:

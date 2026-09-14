@@ -14,10 +14,10 @@ from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Request as WRequest
 from werkzeug.wrappers import Response as WResponse
 
-from mineworker import AirSpider, Request, setting
-from mineworker.exceptions import ContentTypeRejectedError, ResponseTooLargeError
-from mineworker.network import circuit
-from mineworker.network.downloader import close_default_downloaders
+from netspy import AirSpider, Request, setting
+from netspy.exceptions import ContentTypeRejectedError, ResponseTooLargeError
+from netspy.network import circuit
+from netspy.network.downloader import close_default_downloaders
 
 CAP = 4096
 
@@ -190,7 +190,7 @@ def test_render_path_also_honours_the_cap() -> None:
     但仍然要判：否则加个 `render=True` 就绕过了上限。
     这里直接测那个判断函数，因为跑真浏览器的用例带 `render` 标记、默认不跑。
     """
-    from mineworker.network.downloader._common import check_size
+    from netspy.network.downloader._common import check_size
 
     check_size(b"x" * (CAP // 2), "http://e/ok")  # 不超限：什么都不该发生
     with pytest.raises(ResponseTooLargeError, match="MAX_RESPONSE_SIZE"):
@@ -198,7 +198,7 @@ def test_render_path_also_honours_the_cap() -> None:
 
 
 def test_render_cap_disabled_by_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    from mineworker.network.downloader._common import check_size
+    from netspy.network.downloader._common import check_size
 
     monkeypatch.setattr(setting, "MAX_RESPONSE_SIZE", 0)
     check_size(b"x" * (CAP * 100), "http://e/huge")  # 不该抛

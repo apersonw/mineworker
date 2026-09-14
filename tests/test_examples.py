@@ -27,7 +27,7 @@ def test_example_imports_and_defines_spider() -> None:
     finally:
         sys.path.remove(str(EXAMPLES))
 
-    import mineworker as mw
+    import netspy as mw
 
     assert issubclass(ex.BookSpider, mw.AirSpider)
     assert issubclass(ex.BookItem, mw.Item)
@@ -46,8 +46,8 @@ def test_example_actually_crawls() -> None:
     finally:
         sys.path.remove(str(EXAMPLES))
 
-    from mineworker import setting
-    from mineworker.utils import log
+    from netspy import setting
+    from netspy.utils import log
 
     setting.ITEM_PIPELINES = []
     setting.LOG_LEVEL = "CRITICAL"

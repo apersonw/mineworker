@@ -5,9 +5,9 @@ import socket
 import httpx
 import pytest
 
-from mineworker import setting
-from mineworker.utils.metrics import MetricsReporter
-from mineworker.utils.stats import Stats
+from netspy import setting
+from netspy.utils.metrics import MetricsReporter
+from netspy.utils.stats import Stats
 
 
 def _free_port() -> int:
@@ -45,9 +45,9 @@ def test_prometheus_exporter_serves_metrics(monkeypatch: pytest.MonkeyPatch) -> 
 
     reporter._tick()
     body = httpx.get(f"http://127.0.0.1:{port}/metrics", timeout=5).text
-    assert "mineworker_request_ok 7.0" in body
-    assert "mineworker_item 2.0" in body
-    assert "mineworker_queue_depth 4.0" in body
+    assert "netspy_request_ok 7.0" in body
+    assert "netspy_item 2.0" in body
+    assert "netspy_queue_depth 4.0" in body
 
 
 def test_reporter_thread_starts_and_stops(monkeypatch: pytest.MonkeyPatch) -> None:

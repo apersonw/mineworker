@@ -1,21 +1,21 @@
-# MineWorker
+# Netspy
 
-一个上手简单、结构清晰的 Python 爬虫框架，对标 [feapder](https://github.com/Boris-code/feapder)：
+一个上手简单、结构清晰的 Python 爬虫框架：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
 ## 安装
 
 ```bash
-pip install mineworker            # 核心
-pip install "mineworker[all]"     # 含浏览器渲染 / MongoDB / MySQL / Redis / CLI / 指标
+pip install netspy            # 核心
+pip install "netspy[all]"     # 含浏览器渲染 / MongoDB / MySQL / Redis / CLI / 指标
 ```
 
-按需选择：`mineworker[render]`（Playwright）、`[mongo]`、`[mysql]`、`[redis]`、`[cli]`、`[metrics]`。
+按需选择：`netspy[render]`（Playwright）、`[mongo]`、`[mysql]`、`[redis]`、`[cli]`、`[metrics]`。
 
 ## 30 秒示例
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class NewsSpider(mw.AirSpider):
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 或用脚手架：
 
 ```bash
-mineworker create -p news_crawler
+netspy create -p news_crawler
 cd news_crawler && python main.py
 ```
 

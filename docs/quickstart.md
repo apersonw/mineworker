@@ -3,8 +3,8 @@
 ## 1. 生成项目
 
 ```bash
-pip install "mineworker[cli]"
-mineworker create -p news_crawler
+pip install "netspy[cli]"
+netspy create -p news_crawler
 ```
 
 生成：
@@ -23,7 +23,7 @@ news_crawler/
 `spiders/news_crawler_spider.py`：
 
 ```python
-import mineworker as mw
+import netspy as mw
 
 
 class NewsCrawlerSpider(mw.AirSpider):
@@ -56,7 +56,7 @@ scheduler - 爬虫结束 | 请求成功 1 | 入库 30 条（去重 0，失败 0�
 ## 4. 调试选择器
 
 ```bash
-mineworker shell https://news.ycombinator.com/
+netspy shell https://news.ycombinator.com/
 >>> response.css("span.titleline > a::text").getall()
 ```
 
@@ -68,17 +68,17 @@ mineworker shell https://news.ycombinator.com/
 SPIDER_THREAD_COUNT = 8
 SPIDER_MAX_RETRY_TIMES = 5
 ITEM_PIPELINES = [
-    "mineworker.pipelines.mongo.MongoPipeline",
+    "netspy.pipelines.mongo.MongoPipeline",
 ]
 MONGO_URI = "mongodb://localhost:27017"
 MONGO_DB = "news"
 ```
 
-或用环境变量：`MINEWORKER_SPIDER_THREAD_COUNT=8 python main.py`。
+或用环境变量：`NETSPY_SPIDER_THREAD_COUNT=8 python main.py`。
 
 ## 完整示例
 
-仓库的 [`examples/`](https://github.com/apersonw/mineworker/tree/main/examples)
+仓库的 [`examples/`](https://github.com/apersonw/netspy/tree/main/examples)
 里有可以直接跑的例子：
 
 ```bash

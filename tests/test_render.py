@@ -8,10 +8,10 @@ from typing import Any
 import pytest
 from pytest_httpserver import HTTPServer
 
-from mineworker import AirSpider, Request, setting
-from mineworker.exceptions import RequestError
-from mineworker.network.downloader import close_default_downloaders
-from mineworker.network.downloader._playwright import PlaywrightDownloader
+from netspy import AirSpider, Request, setting
+from netspy.exceptions import RequestError
+from netspy.network.downloader import close_default_downloaders
+from netspy.network.downloader._playwright import PlaywrightDownloader
 
 pytestmark = pytest.mark.render
 
