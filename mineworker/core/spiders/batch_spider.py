@@ -77,6 +77,11 @@ class BatchSpider(BaseParser):
             self,
             redis_key=self._rk,
             keep_alive=keep,
+            # BatchSpider 的身份是「批次作业」：batch_pending / batch_done / master 锁
+            # 都在作业命名空间下，批次本身就是它的重跑单位。RUN_ID 是给
+            # 「同一个 Spider 定时重跑」用的，对它没有意义 —— 显式关掉，
+            # 免得平台注入的 RUN_ID 把 worker 的队列和心跳挪到别处、监控找不到
+            run_id="",
             thread_count=thread_count,
             item_handler=item_handler,
             pipelines=pipelines,

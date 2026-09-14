@@ -63,7 +63,11 @@ class BaseScheduler:
         # collector 要先建：ItemBuffer 落库之后要回调它销账
         self._collector = Collector(self._task_queue)
         self._item_buffer = ItemBuffer(
-            self.stats, handler=item_handler, pipelines=pipelines, ack=self._collector.done
+            self.stats,
+            handler=item_handler,
+            pipelines=pipelines,
+            dedup=self._make_item_dedup(),
+            ack=self._collector.done,
         )
         self._middleware = MiddlewareManager(setting.DOWNLOADER_MIDDLEWARES)
         self._user_pool = parser.user_pool()
@@ -90,6 +94,15 @@ class BaseScheduler:
 
     def _make_dedup(self) -> Filter | None:
         return None  # None => RequestBuffer 用 setting.DEDUP_FILTER 的默认实现
+
+    def _make_item_dedup(self) -> Any:
+        """Item 去重器；None => ItemBuffer 自己按默认命名空间建。
+
+        分布式调度器要覆盖它：运行作用域下 Item 指纹也得落在本次运行下，
+        否则第二次运行的每一条 Item 都会被上一次的指纹挡掉 —— 请求重抓了，
+        数据却一条都没入库，又是一种 exit 0 的空转。
+        """
+        return None
 
     def _seed(self) -> None:
         count = self._seed_requests()

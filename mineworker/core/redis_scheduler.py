@@ -18,7 +18,8 @@ from mineworker import setting
 from mineworker.core.base_scheduler import BaseScheduler
 from mineworker.core.task_queue import RedisTaskQueue
 from mineworker.db.redisdb import acquire_once, get_redis
-from mineworker.dedup import get_request_filter
+from mineworker.dedup import get_item_filter, get_request_filter
+from mineworker.exceptions import ConfigError
 from mineworker.utils import stats as sk
 from mineworker.utils import tools
 from mineworker.utils.log import get_logger
@@ -27,11 +28,31 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from mineworker.core.base_parser import BaseParser
-    from mineworker.dedup import Filter
+    from mineworker.dedup import Dedup, Filter
 
 log = get_logger("scheduler")
 
 _FAILED_KEY = "failed_requests"
+
+
+def _resolve_dedup_scope(run_id: str) -> str:
+    """把 DEDUP_SCOPE 的 auto 落到 run / spider 之一。
+
+    没有 RUN_ID 时 run 没有意义（没有「本次运行」这个东西），退化成 spider 并出声 ——
+    用户显式要了 run 却没给运行标识，多半是漏配了。
+    """
+    scope = str(setting.DEDUP_SCOPE or "auto").strip().lower()
+    if scope == "auto":
+        return "run" if run_id else "spider"
+    if scope not in {"run", "spider"}:
+        raise ConfigError(f"未知的 DEDUP_SCOPE：{scope!r}（可选 auto / run / spider）")
+    if scope == "run" and not run_id:
+        log.warning(
+            "DEDUP_SCOPE=run 但没有 RUN_ID —— 没有「本次运行」可言，退化为 spider"
+            "（去重跨运行持久）。要每次从头抓，设 MINEWORKER_RUN_ID"
+        )
+        return "spider"
+    return scope
 
 
 class _Heartbeat(threading.Thread):
@@ -42,6 +63,7 @@ class _Heartbeat(threading.Thread):
         node_id: str,
         pending_fn: Callable[[], int],
         renew_fn: Callable[[], int] | None = None,
+        touch_fn: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(name="heartbeat", daemon=True)
         self._redis = redis
@@ -51,6 +73,8 @@ class _Heartbeat(threading.Thread):
         #: 顺手续租约。挂在心跳上而不是另起线程：这个线程还在跑本身就代表
         #: 「本节点还活着」，它停了租约也就该到期 —— 两件事的判据天然是同一个
         self._renew_fn = renew_fn
+        #: 同理顺手给运行作用域下的 key 续 TTL：节点活着，这次运行的 key 就不该过期
+        self._touch_fn = touch_fn
         self._stop_event = threading.Event()
 
     def run(self) -> None:
@@ -66,6 +90,8 @@ class _Heartbeat(threading.Thread):
             log.debug("心跳写入失败", exc_info=True)
         if self._renew_fn is not None:
             self._renew_fn()
+        if self._touch_fn is not None:
+            self._touch_fn()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -78,9 +104,17 @@ class RedisScheduler(BaseScheduler):
         *,
         redis_key: str,
         keep_alive: bool | None = None,
+        run_id: str | None = None,
         **kwargs: Any,
     ) -> None:
-        self._ns = f"{setting.REDIS_KEY_PREFIX}:{redis_key}"
+        #: 作业命名空间：一个 redis_key 一个。不设 RUN_ID 时所有 key 都在这下面
+        self._job_ns = f"{setting.REDIS_KEY_PREFIX}:{redis_key}"
+        #: 运行标识。None = 读配置；"" = 显式关掉（BatchSpider 用，它的身份是批次作业）
+        self._run_id = str(setting.RUN_ID or "") if run_id is None else run_id
+        #: 本次运行的命名空间：队列 / 种子锁 / 在途 / 心跳 / 失败列表都在这下面。
+        #: 设了 RUN_ID 就是 <job>:run:<id>，否则退化成作业命名空间 —— 老行为一字不改
+        self._ns = f"{self._job_ns}:run:{self._run_id}" if self._run_id else self._job_ns
+        self._dedup_scope = _resolve_dedup_scope(self._run_id)
         self._redis = get_redis()
         self._keep_alive = setting.SPIDER_KEEP_ALIVE if keep_alive is None else keep_alive
         self._node_id = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
@@ -89,14 +123,82 @@ class RedisScheduler(BaseScheduler):
         #: 本节点是否拿到过任务 —— 启动宽限只保护「一个都没见过」的窗口
         self._seen_work = False
         self._started_at = time.monotonic()
+        #: 自己留着引用：运行作用域下要给它们的 key 续 TTL
+        self._req_dedup: Dedup | None = None
+        self._item_dedup: Dedup | None = None
         super().__init__(parser, **kwargs)
 
     # ------------------------------------------------------------------
     def _make_task_queue(self) -> RedisTaskQueue:
         return RedisTaskQueue(self._ns, self._redis)
 
+    def _dedup_ns(self) -> str:
+        """去重落在哪：run = 本次运行下（重跑从头抓）；spider = 作业下（增量爬）。"""
+        return self._ns if self._dedup_scope == "run" else self._job_ns
+
     def _make_dedup(self) -> Filter:
-        return get_request_filter(name=self._ns, redis_client=self._redis)
+        self._req_dedup = get_request_filter(name=self._dedup_ns(), redis_client=self._redis)
+        return self._req_dedup
+
+    def _make_item_dedup(self) -> Dedup | None:
+        """运行作用域下 Item 指纹也得跟着走。
+
+        不然请求按运行重抓了，每条 Item 却被上一次运行的指纹挡在入库之前 ——
+        「请求成功 63，入库 0」，又是一种 exit 0 的空转。
+        作业作用域（spider / 没设 RUN_ID）保持老行为：ItemBuffer 自己建，
+        落在全局的 <prefix>:items 下。
+        """
+        if not setting.ITEM_FILTER_ENABLE or self._dedup_scope != "run":
+            return None
+        self._item_dedup = get_item_filter(name=f"{self._ns}:items", redis_client=self._redis)
+        return self._item_dedup
+
+    # ------------------------------------------------------------------
+    # 运行作用域：key 的 TTL 与索引
+    # ------------------------------------------------------------------
+    def _run_keys(self) -> list[str]:
+        """本次运行在 Redis 里占的全部 key（心跳除外，它有自己的短 TTL）。"""
+        keys = [
+            f"{self._ns}:z_requests",
+            f"{self._ns}:z_inflight",
+            f"{self._ns}:lock:seed",
+            f"{self._ns}:{_FAILED_KEY}",
+            f"{self._job_ns}:runs",
+        ]
+        if self._dedup_scope == "run":
+            for dedup in (self._req_dedup, self._item_dedup):
+                if dedup is not None:
+                    keys.extend(dedup.redis_keys())
+        return keys
+
+    def _touch_run_keys(self) -> None:
+        """给运行作用域下的 key 续 TTL。心跳每跳一次调一次，退出时再调一次。
+
+        没有 TTL 的话，每 5 分钟一次的定时任务一天就在 Redis 里留下 288 套 key。
+        由心跳续期而不是一次性设死：一个跑了 8 天的运行不能在第 7 天被自己清掉。
+        对不存在的 key 调 EXPIRE 是空操作，所以列表里多几个没用到的 key 无害。
+        """
+        if not self._run_id:
+            return
+        try:
+            pipe = self._redis.pipeline()
+            for key in self._run_keys():
+                pipe.expire(key, setting.RUN_TTL)
+            pipe.execute()
+        except Exception:
+            log.debug("续期运行 key 失败", exc_info=True)
+
+    def _register_run(self) -> None:
+        """把本次运行记进 <job>:runs（zset，score = 开始时刻）。
+
+        监控要靠它列出「这个爬虫最近跑过哪些运行」—— 否则得 SCAN 整个 keyspace。
+        """
+        if not self._run_id:
+            return
+        try:
+            self._redis.zadd(f"{self._job_ns}:runs", {self._run_id: time.time()}, nx=True)
+        except Exception:
+            log.debug("登记运行失败", exc_info=True)
 
     def _warn_if_dedup_is_process_local(self) -> None:
         """分布式跑着进程内去重时出声 —— 那是个静默错配。
@@ -126,11 +228,26 @@ class RedisScheduler(BaseScheduler):
 
     def _on_start(self) -> None:
         self._warn_if_dedup_is_process_local()
+        self._register_run()
+        self._touch_run_keys()
         self._heartbeat = _Heartbeat(
-            self._redis, self._hkey, self._node_id, self._local_pending, self._renew_leases
+            self._redis,
+            self._hkey,
+            self._node_id,
+            self._local_pending,
+            self._renew_leases,
+            touch_fn=self._touch_run_keys,
         )
         self._heartbeat.start()
         log.info("节点 {} 加入（命名空间 {}）", self._node_id, self._ns)
+        if self._run_id and self._dedup_scope == "spider":
+            # 这是用户的显式选择（增量爬），但后果要说出来：本轮不会重抓以前抓过的 URL。
+            # 不说的话，「运行是新的、却 0 请求」和生产上那两天的空转长得一模一样
+            log.info(
+                "DEDUP_SCOPE=spider：去重跨运行持久（{}），本次运行不会重抓以前抓过的 URL。"
+                "要每次从头抓，把它设成 run（或去掉，auto 在有 RUN_ID 时就是 run）",
+                self._job_ns,
+            )
 
     def _renew_leases(self) -> int:
         """把本节点还持有的任务租约往后推。
@@ -146,13 +263,67 @@ class RedisScheduler(BaseScheduler):
             return 0
 
     def _seed(self) -> None:
-        if not acquire_once(self._redis, f"{self._ns}:lock:seed", ttl=setting.SPIDER_SEED_LOCK_TTL):
-            log.info("另一节点已注入种子，本节点直接消费队列")
+        seed_key = f"{self._ns}:lock:seed"
+        if not acquire_once(self._redis, seed_key, ttl=setting.SPIDER_SEED_LOCK_TTL):
+            self._explain_skipped_seed(seed_key)
             return
         if not self._task_queue.empty():
             log.info("队列非空（{} 条），跳过种子注入，继续消费", self._task_queue.qsize())
             return
         log.info("种子请求 {} 条", self._seed_requests())
+
+    def _explain_skipped_seed(self, seed_key: str) -> None:
+        """拿不到种子锁 —— 是别的节点正在种，还是上一轮留下的？**要分得清。**
+
+        生产上撞到的：定时任务每 5 分钟起一轮，第一轮之后每个节点都在这里
+        打一句「另一节点已注入种子」然后消费一个空队列、exit 0。49 小时、
+        1158 个实例，日志里没有一个字说这是空转。
+
+        判据：锁已经拿了一阵子（超过启动宽限，不是和我同时启动的节点）、
+        队列空、没有在途、没有活节点 —— 那就是一个已经跑完的作业，本轮无事可做。
+        """
+        try:
+            ttl = int(self._redis.ttl(seed_key))
+            age = setting.SPIDER_SEED_LOCK_TTL - ttl if ttl > 0 else None
+            stale = (
+                age is not None
+                and age > setting.SPIDER_STARTUP_GRACE
+                and self._task_queue.empty()
+                and self._task_queue.inflight_count() == 0
+                and self._live_node_count() == 0
+            )
+        except Exception:
+            log.debug("判断种子锁状态失败", exc_info=True)
+            stale = False
+        if not stale:
+            log.info("另一节点已注入种子，本节点直接消费队列")
+            return
+        log.warning(
+            "命名空间 {} 里是一个**已完成**的作业：种子锁是 {} 秒前留下的（还有 {} 秒过期）、"
+            "队列空、没有在途、没有活节点。本节点无事可做，会在启动宽限期后正常退出 ——"
+            "这不是崩溃，是空转。要重新抓一遍：设 RUN_ID 让每次运行独立"
+            "（MineWorkerHub 会自动注入），或换一个 redis_key，或手动删掉 {} 和去重 key"
+            "（见 docs/distributed.md「重新注入种子」）。"
+            "另一种可能是别的节点的 start_requests 还没跑完 —— 那它稍后会出现在心跳里。",
+            self._ns,
+            age,
+            ttl,
+            seed_key,
+        )
+
+    def _live_node_count(self) -> int:
+        """心跳还新鲜的节点数（不含本节点 —— 它此刻还没开始跳）。"""
+        now = time.time()
+        entries: dict[str, str] = self._redis.hgetall(self._hkey)
+        alive = 0
+        for raw in entries.values():
+            ts_str, _, _ = raw.partition(":")
+            try:
+                if now - float(ts_str) <= setting.HEARTBEAT_STALE:
+                    alive += 1
+            except ValueError:
+                continue
+        return alive
 
     def _is_done(self) -> bool:
         if self._keep_alive:
@@ -245,6 +416,8 @@ class RedisScheduler(BaseScheduler):
             pushed = len(leftovers)
         if pushed:
             log.info("已把 {} 条未完成请求推回 Redis 队列", pushed)
+        # 心跳已经停了，最后再续一次：退出前才建出来的 key（比如失败列表）也要有 TTL
+        self._touch_run_keys()
 
     # ------------------------------------------------------------------
     def _on_failed_request(self, request: Any) -> None:

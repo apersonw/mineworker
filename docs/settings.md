@@ -78,6 +78,9 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `SPIDER_STARTUP_GRACE` | `10.0` | 启动宽限（秒）：没拿到过任务的节点在此期间不判定结束。防止多节点同启时 N-1 个立刻退出，见[多节点同时启动](distributed.md#多节点同时启动) |
 | `DEDUP_MAX_LAYERS` | `4` | 布隆最多几层。默认容量 ×15、内存 57MB，见[去重的容量](distributed.md#去重的容量) |
 | `DEDUP_WARN_FILL_RATE` | `0.8` | 填到这个比例就告警。**超容会静默丢 URL**，宁可早报 |
+| `RUN_ID` | `""` | 一次「运行」的标识。设了之后队列 / 种子锁 / 在途 / 心跳 / 失败列表落到 `<prefix>:<redis_key>:run:<id>` 下，每次运行互不相干；同一个 id 再起 = 续那次运行。**定时重跑的分布式任务必须设**，见[运行作用域](distributed.md#运行作用域定时重跑) |
+| `DEDUP_SCOPE` | `"auto"` | 去重落在哪：`run`（本次运行下，重跑从头抓）\| `spider`（跨运行持久，增量爬）\| `auto`（有 `RUN_ID` 就是 run，否则 spider） |
+| `RUN_TTL` | `604800` | 运行作用域下 key 的保留秒数（7 天）。跑着时由心跳续期，结束后到期自动清理 |
 | `MONGO_URI` / `MONGO_DB` | `localhost` / `mineworker` | |
 
 ## MySQL

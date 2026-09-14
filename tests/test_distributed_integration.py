@@ -115,6 +115,8 @@ def _run_node(
     global_throttle: bool = False,
     lease: float | None = None,
     store: bool = False,
+    run_id: str = "",
+    dedup: str | None = None,
 ) -> None:
     """一个「节点」：独立进程里跑一个 Spider。
 
@@ -126,6 +128,9 @@ def _run_node(
     from mineworker.utils import log
 
     setting.REDIS_URL = redis_url
+    setting.RUN_ID = run_id
+    if dedup is not None:
+        setting.DEDUP_FILTER = dedup
     setting.ITEM_PIPELINES = [f"{__name__}.SlowFilePipeline"] if store else []
     setting.LOG_LEVEL = "CRITICAL"
     setting.DONE_CHECK_INTERVAL = 0.2
@@ -607,3 +612,58 @@ def test_sigkilled_node_does_not_lose_scraped_data(
         f"少掉的 {PAGES - len(stored)} 条数据永久丢失："
         "任务已销账不会被回收，请求指纹又是入队前写的，重跑也补不回来"
     )
+
+
+# ======================================================================
+# 定时重跑：生产上那 49 小时缩成三轮
+# ======================================================================
+def _round(httpserver: HTTPServer, hits: Any, redis_url: str, key: str, **node_kw: Any) -> int:
+    """起 2 个节点跑完一轮，返回这一轮靶子新增的页面命中数。"""
+    before = len([h for h in list(hits) if h.startswith("/p/")])
+    _join_all(_spawn(2, httpserver.url_for("/seed"), redis_url, key, **node_kw))
+    return len([h for h in list(hits) if h.startswith("/p/")]) - before
+
+
+def test_scheduled_rerun_is_a_noop_without_run_id(httpserver: HTTPServer, clean_redis: str) -> None:
+    """**生产复现**：一个 2 节点的分布式任务每 5 分钟定时跑一次，49 小时里
+    1160 个实例有 1158 个「请求成功 0」，全部 exit 0。这里把它缩成三轮：
+    第一轮真抓，之后每轮两个节点都干净地退出、一个请求都不发。
+
+    这条用例记录的是**默认语义**（一个 redis_key = 一个可续跑的作业），
+    它会一直绿 —— 修的不是这个行为，是让它（a）出声、（b）有 RUN_ID 可选。
+    """
+    hits: Any = mp.Manager().list()
+    _serve(httpserver, hits)
+
+    assert _round(httpserver, hits, clean_redis, "rerun-noop", dedup="redis") == PAGES
+    assert _round(httpserver, hits, clean_redis, "rerun-noop", dedup="redis") == 0
+    assert _round(httpserver, hits, clean_redis, "rerun-noop", dedup="redis") == 0
+
+
+def test_scheduled_rerun_crawls_every_time_with_run_id(
+    httpserver: HTTPServer, clean_redis: str
+) -> None:
+    """同样三轮，每轮一个新 RUN_ID（平台就是这么注入的）：每轮都把全部页面抓一遍，
+    且每轮里每个页面**恰好一次**（两个节点分摊，不重复）。"""
+    hits: Any = mp.Manager().list()
+    _serve(httpserver, hits)
+
+    for n in range(3):
+        got = _round(httpserver, hits, clean_redis, "rerun-fresh", dedup="redis", run_id=f"r{n}")
+        assert got == PAGES, f"第 {n + 1} 轮只抓到 {got}/{PAGES} 页"
+    # 每轮每页恰好一次：三轮就是每页 3 次
+    counts = Counter(h for h in list(hits) if h.startswith("/p/"))
+    assert all(c == 3 for c in counts.values()), {k: v for k, v in counts.items() if v != 3}
+
+    # key 落在各自运行下；运行索引里三个都在
+    import redis as redis_lib
+
+    client = redis_lib.from_url(clean_redis, decode_responses=True)
+    try:
+        assert client.zcard("mineworker:rerun-fresh:runs") == 3
+        assert not client.exists("mineworker:rerun-fresh:lock:seed"), "作业级种子锁不该出现"
+        for n in range(3):
+            assert client.exists(f"mineworker:rerun-fresh:run:r{n}:lock:seed")
+            assert client.ttl(f"mineworker:rerun-fresh:run:r{n}:lock:seed") > 0, "运行 key 没有 TTL"
+    finally:
+        client.close()
