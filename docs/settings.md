@@ -25,6 +25,7 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `COLLECTOR_TASK_COUNT` | `100` | collector 单次从队列取多少任务 |
 | `DONE_CHECK_TIMES` / `DONE_CHECK_INTERVAL` | `3` / `0.5` | 结束检测的复查次数与间隔 |
 | `DUMP_UNFINISHED_ON_EXIT` | `True` | 中断时 dump 未完成请求 |
+| `RUN_SUMMARY_ENABLE` | `True` | 结束时在 stdout 打一行机器可读摘要 `MINEWORKER_RUN_SUMMARY {...}`，供编排层读容器日志区分「跑了」和「抓了」，见[运行摘要](observability.md#运行摘要机器可读) |
 
 ## 请求
 

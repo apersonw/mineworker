@@ -29,7 +29,7 @@ from mineworker.utils import tools
 from mineworker.utils.alert import AlertManager
 from mineworker.utils.log import get_logger
 from mineworker.utils.metrics import MetricsReporter
-from mineworker.utils.stats import Stats
+from mineworker.utils.stats import RUN_SUMMARY_MARKER, Stats
 
 if TYPE_CHECKING:
     from mineworker.core.base_parser import BaseParser
@@ -95,6 +95,25 @@ class BaseScheduler:
     def _make_dedup(self) -> Filter | None:
         return None  # None => RequestBuffer 用 setting.DEDUP_FILTER 的默认实现
 
+    def _summary_context(self) -> dict[str, Any]:
+        """机器摘要里除计数外的上下文。分布式调度器覆盖它补 run_id / namespace。"""
+        return {"spider": type(self._parser).__name__}
+
+    def _emit_run_summary(self) -> None:
+        """把机器可读摘要打到 stdout（一行 `MINEWORKER_RUN_SUMMARY {...}`）。
+
+        **刻意走 print 而不是日志**：这行是给编排层解析的契约，不能被 LOG_LEVEL
+        关掉（生产 worker 有人跑 WARNING），也不该沾 loguru 的时间戳 / 颜色。
+        `flush=True`：容器被停时缓冲里的这行不能丢 —— 它恰恰是用来判定这次跑成没跑成的。
+        """
+        if not setting.RUN_SUMMARY_ENABLE:
+            return
+        payload = {**self.stats.as_summary_dict(), **self._summary_context()}
+        try:
+            print(f"{RUN_SUMMARY_MARKER} {tools.dumps_json(payload, sort_keys=True)}", flush=True)
+        except Exception:  # 打印摘要失败绝不该影响爬虫的退出
+            log.debug("输出运行摘要失败", exc_info=True)
+
     def _make_item_dedup(self) -> Any:
         """Item 去重器；None => ItemBuffer 自己按默认命名空间建。
 
@@ -143,6 +162,7 @@ class BaseScheduler:
             self._teardown()
         self._parser.end_callback()
         log.info("爬虫结束 | {}", self.stats.summary())
+        self._emit_run_summary()
 
     def stop(self) -> None:
         self._interrupted = True
