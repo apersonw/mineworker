@@ -3,7 +3,7 @@
 本文件格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.21.0] - 2026-09-14
 
 **用平台定时重跑分布式 `Spider` 的用户必须升级。** 这一版修的是一个在生产上
 安静跑了两天的空转：一个 2 节点的分布式任务每 5 分钟由 MineWorkerHub 触发一次，
