@@ -3,6 +3,17 @@
 本文件格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- **爬虫结束时在 stdout 打一行机器可读摘要** `MINEWORKER_RUN_SUMMARY {...}`
+  （一行紧凑 JSON：`request_ok` / `items` / `run_id` / `spider` 等）。编排层读容器
+  日志据此区分「跑了」（exit 0）和「抓了」（`request_ok`/`items` > 0）——
+  上一版修的空转，这一版让它从日志里可读。走 stdout 而非日志：**不受 `LOG_LEVEL`
+  影响**、无 loguru 前缀 / 颜色。前缀与字段名是对外契约（`schema` 版本化）。
+  `RUN_SUMMARY_ENABLE=False` 关闭。见 `docs/observability.md`。
+
 ## [0.21.0] - 2026-09-14
 
 **用平台定时重跑分布式 `Spider` 的用户必须升级。** 这一版修的是一个在生产上

@@ -132,6 +132,15 @@ class RedisScheduler(BaseScheduler):
     def _make_task_queue(self) -> RedisTaskQueue:
         return RedisTaskQueue(self._ns, self._redis)
 
+    def _summary_context(self) -> dict[str, Any]:
+        ctx = super()._summary_context()
+        # run_id 空串 = 单机语义没设运行作用域；namespace 是本次运行的实际前缀，
+        # redis_key 是作业前缀 —— Hub 用 run_id 关联实例，用 namespace 去 Redis 查监控
+        ctx["run_id"] = self._run_id
+        ctx["namespace"] = self._ns
+        ctx["redis_key"] = self._job_ns
+        return ctx
+
     def _dedup_ns(self) -> str:
         """去重落在哪：run = 本次运行下（重跑从头抓）；spider = 作业下（增量爬）。"""
         return self._ns if self._dedup_scope == "run" else self._job_ns

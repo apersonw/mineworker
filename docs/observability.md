@@ -1,5 +1,30 @@
 # 监控与调试
 
+## 运行摘要（机器可读）
+
+每次爬虫结束，除了给人看的那行「爬虫结束 | 请求成功 63 …」，还会往 **stdout**
+再打一行**给机器看**的：
+
+```
+MINEWORKER_RUN_SUMMARY {"schema":1,"request_ok":63,"items":60,"run_id":"...","spider":"BookSpider",...}
+```
+
+为什么单列一行：编排层（如 MineWorkerHub）读容器日志判成败，此前只能看 exit code——
+一个空转的实例（种子锁还在、队列空、`request_ok=0`）照样 exit 0，被记成成功。
+生产上一个定时任务两天里 1158/1160 个实例就是这么静默空转的（见
+[运行作用域](distributed.md#运行作用域定时重跑)）。这行摘要让「跑了」和「抓了」
+从日志里一眼可分。
+
+- **走 stdout，不走日志**：不受 `LOG_LEVEL` 影响（有人把 worker 压到 `WARNING`），
+  也不带 loguru 的时间戳 / 颜色——解析方按前缀 `MINEWORKER_RUN_SUMMARY ` 找到该行、
+  取其后的一段当 JSON 即可。
+- 字段是**对外契约**：前缀、`schema`、各计数键名都保持稳定；字段增删时 `schema` +1。
+- 关掉：`RUN_SUMMARY_ENABLE = False`。
+
+判「空转」：`request_ok == 0 and items == 0`（而进程 exit 0）。
+`run_id` / `namespace` 只在设了[运行作用域](distributed.md#运行作用域定时重跑)时非空，
+用来把这行关联到具体实例 / 运行。
+
 ## 指标
 
 ```python

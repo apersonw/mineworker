@@ -78,6 +78,12 @@ DEDUP_SCOPE: str = "auto"
 # 运行作用域下所有 key 的保留时间（秒）。节点在跑时由心跳续期，运行结束后到期
 # 自动清理 —— 否则每 5 分钟一次的定时任务一天就在 Redis 里留下 288 套 key。
 RUN_TTL: int = 7 * 86400
+# 爬虫结束时在 stdout 打一行机器可读摘要（`MINEWORKER_RUN_SUMMARY {...}`）。
+# 编排层（MineWorkerHub）读容器日志靠它区分「跑了」和「抓了」——
+# 生产上 1158 个空转实例全被记成 success，就是因为没有这样一行可读的东西。
+# 走 stdout 而不是日志：**不受 LOG_LEVEL 影响**（有人把 worker 日志压到 WARNING），
+# 也不带 loguru 的时间戳 / 颜色，解析方拿到的是干净的一行 JSON。
+RUN_SUMMARY_ENABLE: bool = True
 HEARTBEAT_INTERVAL: float = 3.0  # 节点心跳写入间隔（秒）
 HEARTBEAT_STALE: float = 15.0  # 超过此秒数没心跳的节点视为已死
 
