@@ -54,6 +54,30 @@ RETRY_BACKOFF: float = 0.0
 # ---- 分布式 Spider ----
 SPIDER_KEEP_ALIVE: bool = False  # True = 爬完不退出，继续轮询队列（配合 TaskSpider / 常驻 worker）
 SPIDER_SEED_LOCK_TTL: int = 86400  # start_requests 一次性锁的 TTL（秒）
+
+# ---- 运行作用域 ----
+# 一次「运行」的标识。设了之后，队列 / 种子锁 / 在途 / 心跳 / 失败列表都落到
+# <prefix>:<redis_key>:run:<RUN_ID> 下 —— 每次运行互不相干，重跑就是重跑。
+#
+# 不设 = 老行为：一个 redis_key 就是一个可续跑的作业，种子只注入一次、去重永久。
+# 那个模型对「一次性大抓取，多机分摊」是对的；对**定时重跑**是错的 ——
+# 生产上一个每 5 分钟跑一次的 2 节点任务，49 小时里 1158/1160 个实例 0 请求，
+# 全部 exit 0：第一轮之后种子锁（24h TTL）让所有节点都走「别人种过了」，
+# 每天抢到锁的那一个又被无 TTL 的布隆把种子 URL 挡掉。
+#
+# MineWorkerHub 会给每个实例自动注入 MINEWORKER_RUN_ID；自己跑就
+# export MINEWORKER_RUN_ID=$(date +%s) 之类。同一个 RUN_ID 再起 = 续那次运行。
+RUN_ID: str = ""
+# 去重的作用域：auto | run | spider
+#   run    —— 去重也落在本次运行下，下一次运行从头抓（定时重抓要的就是这个）
+#   spider —— 去重跨运行持久，抓过的 URL 以后不再抓（增量爬）。启动时会出声提醒
+#   auto   —— 设了 RUN_ID 就是 run，没设就是 spider
+# 默认偏向 run：选错的代价不对称 —— run 选错了是多抓一遍（看得见），
+# spider 选错了是空转（exit 0，看不见，生产上就是这么过了两天）。
+DEDUP_SCOPE: str = "auto"
+# 运行作用域下所有 key 的保留时间（秒）。节点在跑时由心跳续期，运行结束后到期
+# 自动清理 —— 否则每 5 分钟一次的定时任务一天就在 Redis 里留下 288 套 key。
+RUN_TTL: int = 7 * 86400
 HEARTBEAT_INTERVAL: float = 3.0  # 节点心跳写入间隔（秒）
 HEARTBEAT_STALE: float = 15.0  # 超过此秒数没心跳的节点视为已死
 

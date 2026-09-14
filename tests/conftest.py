@@ -7,16 +7,26 @@ from typing import Any
 import pytest
 
 from mineworker import setting
+from mineworker.network.downloader._common import set_effective_concurrency
 from mineworker.utils import log
 
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> Iterator[None]:
-    """每个测试前后都把配置与日志恢复到默认，隔离用例间的环境 / 配置改动。"""
+    """每个测试前后都把配置与日志恢复到默认，隔离用例间的环境 / 配置改动。
+
+    `set_effective_concurrency(None)` 也在这里：那个全局是「调度器告知的真实线程数」，
+    **取最大值且永不自降**，任何起过 Spider 的用例都会把它留给后面的用例。
+    `test_session_sharding` 之前一直只是**碰巧**绿的 —— 按字母序排在它前面的
+    `test_effective_concurrency` 自己收尾时把它清了；插进一个名字在两者之间、
+    又起了 Spider 的测试文件，它就红了（test_run_scope.py 就是这么撞出来的）。
+    """
     setting.reload()
+    set_effective_concurrency(None)
     log.configure()
     yield
     setting.reload()
+    set_effective_concurrency(None)
     log.configure()
 
 

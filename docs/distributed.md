@@ -50,6 +50,54 @@ python main.py    # 机器 B —— 自动加入，一起消费队列
 `redis_key` 默认是爬虫类名，决定 Redis 命名空间。不同爬虫用不同 `redis_key`，
 同一个爬虫的多个进程用同一个。
 
+## 运行作用域（定时重跑）
+
+上面那套模型是「**一个 `redis_key` = 一个可续跑的作业**」：种子只注入一次，
+抓过的 URL 永远不再抓。对「一次性大抓取，多机分摊，崩了续上」这是对的；
+对**定时重跑**是错的 —— 而且错得没有声音。
+
+!!! danger "生产上真发生过"
+    一个 2 节点的分布式任务由平台每 5 分钟触发一次。49 小时里 1160 个实例，
+    **1158 个「请求成功 0，入库 0 条」**，全部 exit 0，全部被记成 success。
+    只有第一轮真干了活。
+
+    机制：第一轮把 `lock:seed` 留在了 Redis 里（24 小时 TTL），之后每一轮
+    的每个节点都打一句「另一节点已注入种子」，消费一个空队列，退出；
+    每 24 小时抢到锁的那一个节点，种子 URL 又被没有 TTL 的布隆去重掉。
+
+修法是给「运行」一个身份：
+
+```bash
+export MINEWORKER_RUN_ID=$(date +%s)     # 或任何每次都不同的字符串
+python main.py
+```
+
+设了 `RUN_ID`，队列 / 种子锁 / 在途 / 心跳 / 失败列表都落到
+`<prefix>:<redis_key>:run:<RUN_ID>` 下：
+
+| | 没设 `RUN_ID`（默认） | 设了 `RUN_ID` |
+|---|---|---|
+| 再跑一次 | 续上次：种子不再注入，队列空就退出 | **从头抓**（新运行） |
+| 同一个 id 再起 | — | 续那次运行（崩了续上的语义还在，只是挪到了运行这一层） |
+| 去重 | 永久，跨运行 | 按 `DEDUP_SCOPE`：默认 `run`（每次重抓），`spider` = 增量爬 |
+| key 的寿命 | 永久 | `RUN_TTL`（默认 7 天），跑着时由心跳续期 |
+| 运行索引 | — | `<prefix>:<redis_key>:runs`（zset，score = 开始时刻） |
+
+`DEDUP_SCOPE` 默认偏向 `run`，因为选错的代价不对称：`run` 选错了是多抓一遍
+（看得见），`spider` 选错了是空转（exit 0，看不见 —— 上面那两天就是这么过的）。
+真要增量爬，显式写 `DEDUP_SCOPE = "spider"`，启动时会打一行 INFO 说明
+本轮不会重抓以前抓过的 URL。
+
+[MineWorkerHub](https://github.com/apersonw/mineworkerhub) 给每个实例自动注入
+`MINEWORKER_RUN_ID`，平台上的任务不用管这件事。
+
+`BatchSpider` 不受 `RUN_ID` 影响：它的身份是批次作业，批次本身就是重跑单位。
+
+!!! note "没设 `RUN_ID` 也不再是静默的"
+    节点拿不到种子锁时会看一眼：锁是不是很早以前留下的、队列是不是空的、
+    有没有活节点。三条都是 —— 那就是一个已完成的作业，会打一条 **WARNING**
+    说明本轮无事可做、以及怎么改。同时启动的节点之间不会误报（锁太新）。
+
 ## 常驻模式
 
 ```python
@@ -71,6 +119,9 @@ DEDUP_FILTER = "redis"               # redis（布隆）| redis-set（精确）
 # 共享队列会让大部分现象看起来正常，所以这个错配不报错、只是悄悄多抓多写 ——
 # 0.18.0 起启动时会为此告警。
 SPIDER_SEED_LOCK_TTL = 86400         # 种子锁 TTL（秒）；过期后下次启动会重新注入种子
+RUN_ID = ""                          # 设了 = 每次运行独立，见「运行作用域」；平台会注入
+DEDUP_SCOPE = "auto"                 # run（每次重抓）| spider（增量爬）| auto（有 RUN_ID 就 run）
+RUN_TTL = 7 * 86400                  # 运行作用域下 key 的保留秒数
 HEARTBEAT_INTERVAL = 3.0
 HEARTBEAT_STALE = 15.0               # 超过这个秒数没心跳的节点视为已死
 SPIDER_KEEP_ALIVE = False
@@ -241,7 +292,9 @@ SPIDER_STARTUP_GRACE = 10.0   # 秒；0 = 关闭
 
 ## 重新注入种子
 
-想让爬虫重新从头跑（比如换了一批种子）：删掉种子锁和队列。
+想让爬虫重新从头跑（比如换了一批种子）：**首选设一个新的 `RUN_ID`**
+（见[运行作用域](#运行作用域定时重跑)），什么都不用删。
+没用 `RUN_ID` 的老部署，删掉种子锁和队列：
 
 ```bash
 redis-cli DEL mineworker:NewsSpider:lock:seed mineworker:NewsSpider:z_requests

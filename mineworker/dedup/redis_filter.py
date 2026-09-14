@@ -33,6 +33,10 @@ class RedisSetFilter:
     def __len__(self) -> int:
         return int(self._r.scard(self._key))
 
+    def redis_keys(self) -> list[str]:
+        """这个过滤器在 Redis 里占的全部 key —— 运行作用域下要给它们续 TTL。"""
+        return [self._key]
+
 
 #: 查所有层 + 往顶层置位 + 计数，**一次往返且原子**。
 #:
@@ -130,6 +134,15 @@ class RedisBloomFilter:
     def capacity(self) -> int:
         """所有层的容量之和 —— 到顶之前还能装多少。"""
         return self._cumulative[-1]
+
+    def redis_keys(self) -> list[str]:
+        """这个过滤器在 Redis 里占的全部 key（各层位数组 + 计数器）。
+
+        运行作用域下调度器靠它给去重 key 续 TTL —— 层数是构造时算好的，
+        所以这里列出的是**可能**出现的 key，还没被置位过的层在 Redis 里不存在，
+        对不存在的 key 调 EXPIRE 是空操作，无害。
+        """
+        return [self._count_key, *self._layer_keys]
 
     @property
     def count(self) -> int:

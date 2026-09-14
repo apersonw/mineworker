@@ -111,6 +111,11 @@ class Dedup:
     def __contains__(self, value: Any) -> bool:
         return self.get(value)
 
+    def redis_keys(self) -> list[str]:
+        """底层过滤器在 Redis 里占的 key；进程内过滤器返回空列表。"""
+        fn = getattr(self._filter, "redis_keys", None)
+        return list(fn()) if callable(fn) else []
+
 
 def get_request_filter(
     name: str = "mineworker:requests", redis_client: Redis | None = None
