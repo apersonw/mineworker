@@ -182,11 +182,21 @@ def test_a_stale_job_is_reported_loudly(
 
     第二个进程一启动就该看得出来：种子锁是上一轮留下的、队列空、没有活节点。
     这时要告诉用户为什么本轮什么都不会干、以及怎么改。
+
+    ⚠️ 判据是「锁的年龄 > 启动宽限」，用来把「和我同时启动的节点」和「上一轮的
+    残留」分开。**不能靠两个 _run 之间真实流逝的时间**去凑那个年龄 —— 第一版
+    就是这么写的，本地第一轮爬完花了 1 秒多（age=1）过了，CI 上快到不足 1 秒
+    （TTL 还没掉一整秒，age=0）就不触发，四个 Python 版本齐红。
+    这里显式把种子锁「变旧」，模拟定时任务两轮之间那 5 分钟间隔 —— 确定性的。
     """
     hits: list[str] = []
     _serve(httpserver, hits)
     url = httpserver.url_for("/seed")
     _run(url)
+
+    # 模拟「上一轮是 5 分钟前跑的」：把锁的剩余 TTL 往下压，等价于它老了 300 秒
+    seed_key = f"{NS}:rerun:lock:seed"
+    fake_redis.expire(seed_key, int(setting.SPIDER_SEED_LOCK_TTL - 300))
     _run(url)
 
     text = logfile.read_text(encoding="utf-8")
