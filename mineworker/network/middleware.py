@@ -17,13 +17,13 @@ from typing import Any, cast
 from mineworker.network.request import Request
 from mineworker.network.response import Response
 from mineworker.utils import tools
-from mineworker.utils.log import get_logger
+from mineworker.utils.log import LoggerMixin, get_logger
 
 log = get_logger("middleware")
 
 
-class DownloaderMiddleware:
-    """基类，子类按需覆写。"""
+class DownloaderMiddleware(LoggerMixin):
+    """基类，子类按需覆写。子类里可以直接 ``self.logger.info(...)``。"""
 
     def process_request(self, request: Request) -> Request | Response | None:
         return None

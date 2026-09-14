@@ -10,6 +10,8 @@ import abc
 from dataclasses import dataclass, field
 from typing import Any
 
+from mineworker.utils.log import LoggerMixin
+
 
 @dataclass
 class User:
@@ -22,16 +24,16 @@ class User:
         return self.username
 
 
-class UserPool(abc.ABC):
+class UserPool(LoggerMixin, abc.ABC):
     @abc.abstractmethod
     def get(self) -> User | None:
         """借一个可用账号；没有可用的返回 None。"""
 
-    def report_ok(self, user: User) -> None:  # noqa: B027
+    def report_ok(self, user: User) -> None:
         """账号用完且正常，归还池子。"""
 
-    def report_bad(self, user: User, *, block_seconds: float = 1800.0) -> None:  # noqa: B027
+    def report_bad(self, user: User, *, block_seconds: float = 1800.0) -> None:
         """账号被封 / cookie 失效，拉黑 ``block_seconds`` 秒。"""
 
-    def close(self) -> None:  # noqa: B027
+    def close(self) -> None:
         """释放资源。"""
