@@ -2,12 +2,17 @@
 
 只有 :meth:`start_requests` 和 :meth:`parse`（或每个 Request 指定的 ``callback``）
 是必须关心的，其余都有合理默认值。
+
+混入了 :class:`~mineworker.utils.log.LoggerMixin`：子类里直接
+``self.logger.info(...)``，不用自己 import / get_logger。
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
+
+from mineworker.utils.log import LoggerMixin
 
 if TYPE_CHECKING:
     from mineworker.network.request import Request
@@ -18,7 +23,7 @@ if TYPE_CHECKING:
 ParseResult = Iterable[Any]
 
 
-class BaseParser:
+class BaseParser(LoggerMixin):
     # ------------------------------------------------------------------
     # 必须 / 常用
     # ------------------------------------------------------------------

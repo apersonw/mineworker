@@ -29,6 +29,14 @@ MySpider().start()          # 阻塞至爬完并优雅退出
 | `mw.Item` / `dict` | 进 ItemBuffer → 批量落库 |
 | 可调用对象 | 在当前工作线程执行 |
 
+打日志直接 `self.logger`，不用自己 `import logging` 或 `get_logger`——日志里
+显示的名字就是这个爬虫类自己的类名：
+
+```python
+def parse(self, request, response):
+    self.logger.info("抓到 {} 条", len(items))
+```
+
 ## Request
 
 ```python

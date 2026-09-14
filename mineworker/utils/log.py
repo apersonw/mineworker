@@ -56,3 +56,25 @@ def get_logger(name: str | None = None) -> Logger:
     if not _state["configured"]:
         configure()
     return logger.bind(name=name) if name else logger
+
+
+class LoggerMixin:
+    """混入它就有 ``self.logger``——绑定了具体子类名的 logger。
+
+    没有它之前，写一个爬虫 / 管道 / 中间件想打日志，得自己
+    ``from mineworker.utils.log import get_logger`` 再手动 bind 一个名字，
+    还常常图省事直接开在模块级（一个全局变量，和这个类本身没绑定关系）。
+    `BaseParser` / `BasePipeline` / `DownloaderMiddleware` / `UserPool`
+    都混入了它——写子类时直接 ``self.logger.info(...)`` 就行。
+
+    写成 `@property` 现取、不缓存成实例属性，是因为混入它的几个基类
+    （`BaseParser` / `DownloaderMiddleware` / `UserPool`）互相之间构造方式
+    不一致——有的没有 `__init__`，有的子类重写 `__init__` 时不调用
+    `super().__init__()`——没有一个通用的时机能安全地把它写进 `self.__dict__`。
+    `property` 不依赖构造过程，混进去就能用。`get_logger` 本身只是
+    `logger.bind()`，loguru 里很轻，现取不是性能负担。
+    """
+
+    @property
+    def logger(self) -> Logger:
+        return get_logger(type(self).__name__)

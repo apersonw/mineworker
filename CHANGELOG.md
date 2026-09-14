@@ -3,6 +3,18 @@
 本文件格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- **`self.logger`**：`AirSpider` / `Spider` / `BatchSpider` / `TaskSpider`
+  （经 `BaseParser`）、`BasePipeline`、`DownloaderMiddleware`、`UserPool`
+  现在都带一个绑定了子类名的 logger，直接 `self.logger.info(...)` 就行——
+  不用再自己 `from mineworker.utils.log import get_logger` 手动 bind 一个
+  和这个类没绑定关系的名字（此前常见做法是开一个模块级全局变量）。
+  模块级的 `mw.log` / `mw.get_logger(name)` 不变，脚本级代码继续用它们。
+  新增 `mineworker.utils.log.LoggerMixin`，见 `docs/settings.md`。
+
 ## [0.22.0] - 2026-09-14
 
 ### 新增

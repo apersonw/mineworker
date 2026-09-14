@@ -129,6 +129,21 @@ MINEWORKER_SPIDER_THREAD_COUNT=8 MINEWORKER_LOG_LEVEL=DEBUG python main.py
 | `LOG_FILE` | `None`（只输出到 stderr） |
 | `LOG_ROTATION` / `LOG_RETENTION` | `"50 MB"` / `"10 days"` |
 
+写爬虫 / 管道 / 中间件 / 账号池时直接用 `self.logger`，不用自己
+`from mineworker.utils.log import get_logger` 再手动 bind 一个名字：
+
+```python
+class BookSpider(mw.AirSpider):
+    def parse(self, request, response):
+        self.logger.info("抓到 {} 条", len(items))
+```
+
+`AirSpider` / `Spider` / `BatchSpider` / `TaskSpider`（继承自 `BaseParser`）、
+`BasePipeline`、`DownloaderMiddleware`、`UserPool` 都已经带了它——日志里的
+名字就是这个子类自己的类名（比如上面这行会显示 `BookSpider`，不是一个
+和具体类没关系的固定名字）。模块级的 `mw.log` / `mw.get_logger(name)`
+还在，写在类外面（脚本级代码、独立函数）时用那两个。
+
 ## `USE_SESSION` 与分片
 
 `USE_SESSION` 的收益**不是一个固定倍数**。一个 `httpx.Client` 被太多线程共用时，
