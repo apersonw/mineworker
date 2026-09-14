@@ -1,7 +1,9 @@
 # Roadmap
 
 > 项目已从 **MineWorker** 更名为 **Netspy**（PyPI 旧包 `mineworker` 停在 0.23.0 不再更新，
-> 新包 `netspy` 从 **0.1.0** 重新起版本号——同一套代码，只是换了个名字和 PyPI 项目）。
+> 新包 `netspy` 从 **1.0.0** 重新起版本号——同一套代码，只是换了个名字和 PyPI 项目；
+> 没用 0.1.0 是因为 `v0.1.0`……`v0.23.0` 这些 git tag 都已经是改名前 mineworker
+> 自己的历史版本，占着不能重用）。
 > 下面「已完成」小节里出现的 `mineworker` / `MineWorker` / `MineWorkerHub` /
 > `mineworker create` 这类字样，都是改名前各版本的历史原文，**不做回溯改写**——
 > 就像不会去改写已经发过的 git 提交信息一样。改名前的完整版本历史见
