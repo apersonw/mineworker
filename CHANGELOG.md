@@ -3,6 +3,10 @@
 本文件格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-09-15
+
+文档修正，无代码变更。README 里刷新了一下措辞。
+
 ## [1.0.0] - 2026-09-15
 
 首个正式版本。
