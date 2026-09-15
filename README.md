@@ -9,9 +9,8 @@
 一个上手简单、结构清晰的 Python 爬虫框架：
 你只写 `start_requests` 和 `parse`，框架负责调度、下载、重试、去重、批量落库。
 
-> 前身是 MineWorker（同一套代码更名而来）——单机（`AirSpider`）到分布式
-> （`Spider` / `TaskSpider` / `BatchSpider`）全部可用，并支持
-> [浏览器 TLS 指纹伪装](https://apersonw.github.io/netspy/anti-bot/)。
+> 单机（`AirSpider`）到分布式（`Spider` / `TaskSpider` / `BatchSpider`）全部可用，
+> 并支持[浏览器 TLS 指纹伪装](https://apersonw.github.io/netspy/anti-bot/)。
 > 变更见 [CHANGELOG](CHANGELOG.md)，后续规划见 [Roadmap](https://apersonw.github.io/netspy/roadmap/)。
 
 ## 安装
